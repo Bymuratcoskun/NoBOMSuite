@@ -1,0 +1,20 @@
+{
+  "name": "nobomsuite",
+  "version": "0.1.0",
+  "description": "Native Node.js wrapper for the NoBOMSuite (DevGuard) core scanning engine.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "bom",
+    "sanitizer",
+    "linter",
+    "devguard"
+  ],
+  "author": "NoBOMSuite Team",
+  "license": "MIT",
+  "dependencies": {
+    "ffi-napi": "^4.0.3"
+  }
+}

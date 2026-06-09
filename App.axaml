@@ -1,0 +1,22 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="NoBOMSuite.Desktop.App"
+             RequestedThemeVariant="Dark">
+             
+    <Application.Styles>
+        <FluentTheme />
+    </Application.Styles>
+
+    <TrayIcon.Icons>
+        <TrayIcons>
+            <TrayIcon ToolTipText="DevGuard Ajanı (Arka Plan İzlemesi Aktif)">
+                <TrayIcon.Menu>
+                    <NativeMenu>
+                        <NativeMenuItem Header="Arayüzü Göster" Click="TrayIcon_Show_Click" />
+                        <NativeMenuItem Header="Çıkış Yap" Click="TrayIcon_Exit_Click" />
+                    </NativeMenu>
+                </TrayIcon.Menu>
+            </TrayIcon>
+        </TrayIcons>
+    </TrayIcon.Icons>
+</Application>

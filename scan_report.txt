@@ -1,0 +1,10 @@
+Tarama tamamlandı. Dosya sayısı: 48
+
+bom_files: 0
+
+ghost_char_files: 0
+
+mixed_line_endings: 0
+
+no_final_newline: 0
+

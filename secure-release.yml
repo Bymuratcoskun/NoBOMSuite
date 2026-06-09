@@ -1,0 +1,72 @@
+name: NoBOMSuite Secure Release Pipeline
+
+on:
+  push:
+    tags:
+      - 'v*' # v1.0.0 gibi bir versiyon etiketi atıldığında tetiklenir
+  workflow_dispatch: # Manuel tetikleme butonu
+
+jobs:
+  build:
+    name: Build & Sign (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: macos-latest
+            rid: osx-x64
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET Environment
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Install Native Dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+      - name: Restore Solution Dependencies
+        run: dotnet restore NoBOMSuite.sln
+
+      - name: Publish Native CLI (NativeAOT)
+        run: dotnet publish SanitizerKit.CLI/SanitizerKit.CLI.csproj -c Release -r ${{ matrix.rid }} --no-restore -o ./artifacts/cli
+
+      - name: Publish Desktop GUI (Single File)
+        run: dotnet publish NoBOMSuite.Desktop/NoBOMSuite.Desktop.csproj -c Release -r ${{ matrix.rid }} -p:PublishSingleFile=true --no-restore -o ./artifacts/desktop
+
+      - name: Sign Windows Executables (Code Signing)
+        if: matrix.os == 'windows-latest'
+        env:
+          CERT_BASE64: ${{ secrets.WIN_CODESIGN_CERT }}
+          CERT_PASSWORD: ${{ secrets.WIN_CODESIGN_PASSWORD }}
+        run: |
+          if ("$env:CERT_BASE64" -ne "") {
+            $pfxPath = "$env:TEMP\DevGuardCert.pfx"
+            [System.IO.File]::WriteAllBytes($pfxPath, [System.Convert]::FromBase64String($env:CERT_BASE64))
+            signtool sign /f $pfxPath /p $env:CERT_PASSWORD /tr http://timestamp.digicert.com /td sha256 /fd sha256 .\artifacts\desktop\NoBOMSuite.Desktop.exe
+            signtool sign /f $pfxPath /p $env:CERT_PASSWORD /tr http://timestamp.digicert.com /td sha256 /fd sha256 .\artifacts\cli\SanitizerKit.CLI.exe
+          }
+
+      - name: Generate SHA-256 Integrity Checksums
+        shell: bash
+        run: |
+          cd artifacts
+          find . -type f -exec sha256sum {} + > ../NoBOMSuite-${{ matrix.rid }}-checksums.sha256
+
+      - name: Upload Secure Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: NoBOMSuite-SecureRelease-${{ matrix.rid }}
+          path: |
+            artifacts/
+            NoBOMSuite-${{ matrix.rid }}-checksums.sha256

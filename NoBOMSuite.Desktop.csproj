@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Avalonia'nın kullandığı eski DBus kütüphanesi uyarılarını gizle -->
+    <NoWarn>$(NoWarn);NU1603;NU1903</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.1.3" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.1.3" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.1.3" />
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.16.0" />
+    
+    <ProjectReference Include="SanitizerKit.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="BackupManager.cs;BomConfigManager.cs;BomScanner.cs;DevGuardLogger.cs;DiagnosticAiAgent.cs;FileLockManager.cs;FixAiAgent.cs;GhostCharScanner.cs;IpcServer.cs;IpcClient.cs;IScanner.cs;LineEndingScanner.cs;LocalAiFirewall.cs;NativeApi.cs;NewlineScanner.cs;PatchGenerator.cs;PrivacyGuard.cs;SecurityAiAgent.cs;TabScanner.cs;HardcodedPasswordScanner.cs;FixRecipeAiAgent.cs;WasmBridge.cs" />
+    <Compile Remove="*Tests.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Exclude helper scripts and tools from the desktop app build -->
+    <Compile Remove="scripts\**\*.cs" />
+  </ItemGroup>
+
+</Project>

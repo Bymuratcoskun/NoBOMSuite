@@ -1,0 +1,14 @@
+{
+  "AutoFix": false,
+  "BackupEnabled": true,
+  "StrictOfflineMode": true,
+  "TabSize": 4,
+  "ExcludedExtensions": [
+    ".exe",
+    ".dll",
+    ".png",
+    ".jpg",
+    ".zip"
+  ],
+  "CustomRules": {}
+}

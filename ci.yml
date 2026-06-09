@@ -1,0 +1,78 @@
+name: DevGuard CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Restore Workloads (WASM Tools)
+      run: dotnet workload restore
+
+    - name: Restore dependencies
+      run: dotnet restore NoBOMSuite.sln
+
+    - name: Build
+      run: dotnet build NoBOMSuite.sln --no-restore --configuration Release
+
+    - name: Run Tests
+      run: dotnet test NoBOMSuite.sln --no-build --verbosity normal --configuration Release
+
+  publish-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-and-test
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: windows-latest
+            rid: win-x64
+          - os: macos-latest
+            rid: osx-x64
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+        
+    - name: Restore Workloads (WASM Tools)
+      run: dotnet workload restore
+
+    - name: Restore all solution dependencies
+      run: dotnet restore NoBOMSuite.sln
+
+    - name: Install Native AOT prerequisites (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+    - name: Publish Native AOT
+      # İşletim sistemine göre projeyi C++ hızı ve yapısında Native AOT ile derler (.NET Runtime gerektirmez)
+      run: dotnet publish SanitizerKit.CLI/SanitizerKit.CLI.csproj -c Release -r ${{ matrix.rid }} /p:PublishAot=true --no-restore -o ./publish-output
+
+    - name: Upload to GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ./publish-output/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

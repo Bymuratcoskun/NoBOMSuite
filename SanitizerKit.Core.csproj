@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="BackupManager.cs" />
+    <Compile Include="BomConfigManager.cs" />
+    <Compile Include="BomScanner.cs" />
+    <Compile Include="DevGuardLogger.cs" />
+    <Compile Include="DiagnosticAiAgent.cs" />
+    <Compile Include="FixAiAgent.cs" />
+    <Compile Include="FileLockManager.cs" />
+    <Compile Include="GhostCharScanner.cs" />
+    <Compile Include="IpcServer.cs" />
+    <Compile Include="IScanner.cs" />
+    <Compile Include="LineEndingScanner.cs" />
+    <Compile Include="LocalAiFirewall.cs" />
+    <Compile Include="NewlineScanner.cs" />
+    <Compile Include="PatchGenerator.cs" />
+    <Compile Include="PrivacyGuard.cs" />
+    <Compile Include="SecurityAiAgent.cs" />
+    <Compile Include="TabScanner.cs" />
+    <Compile Include="HardcodedPasswordScanner.cs" />
+    <Compile Include="FixRecipeAiAgent.cs" />
+    <Compile Include="IpcClient.cs" />
+  </ItemGroup>
+
+</Project>

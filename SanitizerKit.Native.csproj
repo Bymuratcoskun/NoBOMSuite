@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Native AOT C-API İhracı -->
+    <PublishAot>true</PublishAot>
+    <OutputType>Library</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="SanitizerKit.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="*Tests.cs" />
+    <Compile Remove="*.axaml.cs;Program.cs;AiOrchestrator.cs;WasmBridge.cs;BackgroundWatcher.cs;BackupManager.cs;BomConfigManager.cs;BomScanner.cs;DevGuardLogger.cs;DiagnosticAiAgent.cs;FixAiAgent.cs;FileLockManager.cs;GhostCharScanner.cs;IpcServer.cs;IpcClient.cs;IScanner.cs;LineEndingScanner.cs;LocalAiFirewall.cs;NewlineScanner.cs;PatchGenerator.cs;PrivacyGuard.cs;SecurityAiAgent.cs;TabScanner.cs;HardcodedPasswordScanner.cs;FixRecipeAiAgent.cs" />
+  </ItemGroup>
+
+</Project>
