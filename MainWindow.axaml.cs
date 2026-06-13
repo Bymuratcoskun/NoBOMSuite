@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -12,14 +13,18 @@ using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.Controls.Notifications;
+using System.Collections.Concurrent;
+using System.Net.Http;
 using System.Threading.Tasks;
 using SanitizerKit.Core.Backups;
+using SanitizerKit.Core.Logging;
 using SanitizerKit.Core.IPC;
 using SanitizerKit.Core.Config;
 using SanitizerKit.Core.Locks;
 using SanitizerKit.Core.AI;
 using SanitizerKit.Core.Scanners;
 using SanitizerKit.UI.ViewModels;
+using SanitizerKit.Core.Caching;
 
 namespace NoBOMSuite.Desktop;
 
@@ -40,14 +45,28 @@ public partial class MainWindow : Window
 
     // Otomatik onarım kapalıyken bulunan sorunlu dosyaları tutar
     private readonly HashSet<string> _pendingFixFiles = new();
+    
+    private readonly ConcurrentQueue<Action> _uiActionQueue = new();
+    private readonly DispatcherTimer _uiUpdateTimer;
 
     public MainWindow() 
     {
         InitializeComponent();
+
+        // Sistem teması ile otomatik senkronizasyon (Açılışta varsayılan)
+        if (Application.Current != null)
+        {
+            Application.Current.RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Default;
+        }
+        
+        // Toplu (Batch) UI Güncelleme Zamanlayıcısını Başlat
+        _uiUpdateTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+        _uiUpdateTimer.Tick += ProcessUiActionQueue;
+        _uiUpdateTimer.Start();
         
         // AI Orkestratörünü (ViewModel yapısı) başlat ve log event'ini arayüze bağla
         _aiOrchestrator = new AiOrchestrator();
-        _aiOrchestrator.OnLogMessage += LogToConsole;
+        _aiOrchestrator.OnLogMessage += (msg) => LogToConsole(msg);
         _aiOrchestrator.OnPatchReady += ShowSolutionReviewDialog;
 
         // Dashboard'u bul ve referansını al
@@ -65,12 +84,14 @@ public partial class MainWindow : Window
             dragDropBorder.PointerExited += (s, e) => dragDropBorder.BorderBrush = new SolidColorBrush(Color.Parse("#313244"));
         }
         
-        // LINUX KESİN ÇÖZÜM 4.0: Olayları doğrudan en üst katmana (Window) bağlıyoruz.
-        // Bu, Wayland/X11'in olayı herhangi bir alt kontrol tarafından yutulmadan yakalamasını sağlar.
-        this.AddHandler(DragDrop.DragEnterEvent, OnDragEnter, handledEventsToo: true);
-        this.AddHandler(DragDrop.DragOverEvent, OnDragOver, handledEventsToo: true);
-        this.AddHandler(DragDrop.DragLeaveEvent, OnDragLeave, handledEventsToo: true);
-        this.AddHandler(DragDrop.DropEvent, OnDrop, handledEventsToo: true);
+        // Görünmez TextBox'ın görsel sınır efektlerini tetiklemesi için (İşletim sisteminin sürükle-bırak mekanizmasını bozmadan)
+        var hiddenDropZone = this.Find<TextBox>("HiddenWaylandDropZone");
+        if (hiddenDropZone != null && dragDropBorder != null)
+        {
+            hiddenDropZone.AddHandler(DragDrop.DragEnterEvent, (s, e) => dragDropBorder.BorderBrush = new SolidColorBrush(Color.Parse("#89B4FA")), handledEventsToo: true);
+            hiddenDropZone.AddHandler(DragDrop.DragLeaveEvent, (s, e) => dragDropBorder.BorderBrush = new SolidColorBrush(Color.Parse("#313244")), handledEventsToo: true);
+            hiddenDropZone.AddHandler(DragDrop.DropEvent, (s, e) => dragDropBorder.BorderBrush = new SolidColorBrush(Color.Parse("#313244")), handledEventsToo: true);
+        }
         
         // Clipboard paste desteği (Ctrl+V) - Linux'ta drag-drop desteğine alternatif
         KeyDown += async (s, e) =>
@@ -129,6 +150,7 @@ public partial class MainWindow : Window
         // Uygulama başlatıldığında güncel ayarları yükle
         LoadSettings();
         CheckVsCodeExtension();
+        this.Loaded += (s, e) => ShowWelcomeTourIfNeeded();
     }
 
     private void CheckVsCodeExtension()
@@ -176,6 +198,29 @@ public partial class MainWindow : Window
         {
             autoFixCb.IsChecked = config.AutoFix;
         }
+
+        var tempInput = this.Find<TextBox>("AiTemperatureInput");
+        if (tempInput != null)
+        {
+            tempInput.Text = config.AiTemperature.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        // Dinamik Modül Yükleme (.bomconfig EnabledModules)
+        var modulesPanel = this.Find<StackPanel>("ModulesPanel");
+        if (modulesPanel != null)
+        {
+            modulesPanel.Children.Clear();
+            foreach (var module in config.EnabledModules)
+            {
+                var cb = new CheckBox
+                {
+                    Content = $"{module.Key} Modülünü Aktifleştir",
+                    IsChecked = module.Value,
+                    Tag = module.Key // Hangi modül olduğunu bulmak için Tag kullanıyoruz
+                };
+                modulesPanel.Children.Add(cb);
+            }
+        }
     }
 
     public void SaveSettings_Click(object? sender, RoutedEventArgs e)
@@ -191,120 +236,31 @@ public partial class MainWindow : Window
                 config.TabSize = newSize;
             }
 
+            var tempInput = this.Find<TextBox>("AiTemperatureInput");
+            if (tempInput != null && double.TryParse(tempInput.Text, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double newTemp))
+            {
+                config.AiTemperature = newTemp;
+            }
+
+            // Dinamik Modül Kaydetme
+            var modulesPanel = this.Find<StackPanel>("ModulesPanel");
+            if (modulesPanel != null)
+            {
+                foreach (var child in modulesPanel.Children)
+                {
+                    if (child is CheckBox cb && cb.Tag is string moduleName)
+                    {
+                        config.EnabledModules[moduleName] = cb.IsChecked ?? false;
+                    }
+                }
+            }
+
             BomConfigManager.SaveConfig(configPath, config);
             LogToConsole("✅ Ayarlar başarıyla kaydedildi.");
         }
         catch (Exception ex)
         {
             LogToConsole($"❌ HATA: Ayarlar kaydedilemedi -> {ex.Message}");
-        }
-    }
-
-    public void OnDragEnter(object? sender, DragEventArgs e)
-    {
-        LogToConsole($"🎣 [DEBUG] OnDragEnter tetiklendi! Gelen: {e.DragEffects}");
-        var dragDropBorder = this.Find<Border>("DragDropBorder");
-        if (dragDropBorder != null) dragDropBorder.BorderBrush = new SolidColorBrush(Color.Parse("#89B4FA"));
-
-        // Linux/GNOME Kuralı: İşletim sistemi kaynağın niyetine (Copy, Move, vb.) müdahale etmemizi sevmiyor.
-        // Yasak (🚫) işaretini tamamen kaldırmak için sunulan her şeyi kabul ediyoruz!
-        e.DragEffects = DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link;
-        e.Handled = true;
-    }
-
-    public void OnDragOver(object? sender, DragEventArgs e)
-    {
-        // Sürükleme devam ederken de her türlü eylemi kabul etmeye devam ediyoruz.
-        e.DragEffects = DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link;
-        e.Handled = true;
-    }
-
-    public void OnDragLeave(object? sender, DragEventArgs e)
-    {
-        var dragDropBorder = this.Find<Border>("DragDropBorder");
-        if (dragDropBorder != null) dragDropBorder.BorderBrush = new SolidColorBrush(Color.Parse("#313244"));
-    }
-
-    public void OnDrop(object? sender, DragEventArgs e)
-    {
-        try
-        {
-            LogToConsole("🎯 [DEBUG] OnDrop event tetiklendi!");
-            var dragDropBorder = this.Find<Border>("DragDropBorder");
-            if (dragDropBorder != null) dragDropBorder.BorderBrush = new SolidColorBrush(Color.Parse("#313244"));
-
-            e.Handled = true;
-            
-            var formats = e.Data.GetDataFormats()?.ToList() ?? new List<string>();
-            LogToConsole($"[DEBUG] Drop formatları: {string.Join(", ", formats)}");
-
-            // Avalonia'nın GetFiles() metodu Linux'ta bazen çökebildiği için try-catch ile korumaya alıyoruz.
-            IEnumerable<IStorageItem>? files = null;
-            try { files = e.Data.GetFiles(); }
-            catch (Exception ex) { LogToConsole($"⚠️ [DEBUG] GetFiles() Hatası: {ex.Message}"); }
-
-            if (files != null && files.Any())
-            {
-                foreach (var file in files)
-                {
-                    string? path = file.TryGetLocalPath();
-                    if (!string.IsNullOrEmpty(path))
-                    {
-                        LogToConsole($"🎯 Sürükle-Bırak Algılandı: {path}");
-                        ScanPath(path);
-                    }
-                }
-                return; // Başarılıysa sonlandır
-            }
-            
-            // Fallback (B Planı): GetFiles() çalışmazsa, Linux dosya yöneticilerinin gönderdiği ham metin verisini ayrıştır.
-            string? textData = null;
-            if (formats.Contains("x-special/gnome-copied-files"))
-            {
-                var gnomeData = e.Data.Get("x-special/gnome-copied-files");
-                if (gnomeData is byte[] gnomeBytes)
-                {
-                    textData = Encoding.UTF8.GetString(gnomeBytes);
-                    var splitLines = textData.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                    textData = string.Join("\n", splitLines.Skip(1)); 
-                }
-            }
-            else if (formats.Contains("text/uri-list"))
-            {
-                var uriData = e.Data.Get("text/uri-list");
-                if (uriData is string uriStr) textData = uriStr;
-                else if (uriData is byte[] uriBytes) textData = Encoding.UTF8.GetString(uriBytes);
-            }
-            else if (formats.Contains(DataFormats.Text))
-            {
-                textData = e.Data.GetText();
-            }
-
-            if (!string.IsNullOrWhiteSpace(textData))
-            {
-                var lines = textData.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                foreach (var line in lines)
-                {
-                    string path = line.Trim();
-                    if (path.StartsWith("file://"))
-                    {
-                        path = Uri.UnescapeDataString(path.Substring(7));
-                    }
-                    if (File.Exists(path) || Directory.Exists(path))
-                    {
-                        LogToConsole($"🎯 Sürükle-Bırak (Text Fallback) Algılandı: {path}");
-                        ScanPath(path);
-                    }
-                }
-            }
-            else
-            {
-                LogToConsole("⚠️ [DEBUG] Sürüklenen veri anlaşılamadı veya boş.");
-            }
-        }
-        catch (Exception ex)
-        {
-            LogToConsole($"❌ [HATA] OnDrop sırasında beklenmeyen bir sorun oluştu: {ex.Message}");
         }
     }
 
@@ -447,7 +403,18 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             // Erişim izni olmayan sistem klasörlerinde programın çökmemesi için sadece uyarı fırlatıyoruz
-            LogToConsole($"⚠️ UYARI: Klasör atlandı ({directoryPath}) -> {ex.Message}");
+            LogToConsole($"⚠️ UYARI: Klasör atlandı ({directoryPath}) -> {ex.Message}", directoryPath);
+        }
+    }
+
+    private void ProcessUiActionQueue(object? sender, EventArgs e)
+    {
+        // Saniyede çok fazla log/UI işlemi gelirse UI Thread'i kilitlememek için tek seferde en fazla 100 işlem işlenir.
+        int processedCount = 0;
+        while (processedCount < 100 && _uiActionQueue.TryDequeue(out var action))
+        {
+            action();
+            processedCount++;
         }
     }
 
@@ -466,7 +433,7 @@ public partial class MainWindow : Window
 
     private void UpdateFixButton()
     {
-        Dispatcher.UIThread.Post(() =>
+        _uiActionQueue.Enqueue(() =>
         {
             var fixBtn = this.Find<Button>("FixPendingButton");
             if (fixBtn != null)
@@ -515,8 +482,21 @@ public partial class MainWindow : Window
             string ext = Path.GetExtension(filePath).ToLowerInvariant();
             if (config.ExcludedExtensions.Contains(ext))
             {
-                LogToConsole($"⏭️ [ATLANDI] Dışlanan dosya türü: {Path.GetFileName(filePath)}");
+                LogToConsole($"⏭️ [ATLANDI] Dışlanan dosya türü: {Path.GetFileName(filePath)}", filePath);
                 return;
+            }
+
+            // Önbellek kontrolü yap (Incremental Scan)
+            if (FileCacheManager.IsCacheValid(filePath, out bool cachedHasIssues))
+            {
+                if (!cachedHasIssues)
+                {
+                    LogToConsole($"⚡ [ÖNBELLEK] Değişiklik yok (Temiz): {Path.GetFileName(filePath)}", filePath);
+                    _uiActionQueue.Enqueue(() => _dashboardView?.UpdateDashboard(filePath, "Temiz (Cache)", new SolidColorBrush(Color.Parse("#A6E3A1"))));
+                    _pendingFixFiles.Remove(filePath);
+                    UpdateFixButton();
+                    return;
+                }
             }
 
             byte[] content = File.ReadAllBytes(filePath);
@@ -528,64 +508,85 @@ public partial class MainWindow : Window
             bool fixNewline = false;
             bool fixTab = false;
             bool fixPassword = false;
+            bool fixCustomRule = false;
 
             if (new BomScanner().HasIssue(span))
             {
-                LogToConsole($"⚠️ [UYARI] UTF-8 BOM Karakteri Tespit Edildi: {Path.GetFileName(filePath)}");
+                LogToConsole($"⚠️ [UYARI] UTF-8 BOM Karakteri Tespit Edildi: {Path.GetFileName(filePath)}", filePath);
                 hasIssue = true;
                 fixBom = true;
             }
             if (new LineEndingScanner().HasIssue(span))
             {
-                LogToConsole($"⚠️ [UYARI] CRLF (Windows) Satır Sonu Tespit Edildi: {Path.GetFileName(filePath)}");
+                LogToConsole($"⚠️ [UYARI] CRLF (Windows) Satır Sonu Tespit Edildi: {Path.GetFileName(filePath)}", filePath);
                 hasIssue = true;
                 fixCrlf = true;
             }
             if (new GhostCharScanner().HasIssue(span))
             {
-                LogToConsole($"⚠️ [UYARI] Görünmez Hayalet Karakter Tespit Edildi: {Path.GetFileName(filePath)}");
+                LogToConsole($"⚠️ [UYARI] Görünmez Hayalet Karakter Tespit Edildi: {Path.GetFileName(filePath)}", filePath);
                 hasIssue = true;
                 fixGhost = true;
             }
             if (new NewlineScanner().HasIssue(span))
             {
-                LogToConsole($"⚠️ [UYARI] POSIX Uyumsuz (EOF Newline Yok) Tespit Edildi: {Path.GetFileName(filePath)}");
+                LogToConsole($"⚠️ [UYARI] POSIX Uyumsuz (EOF Newline Yok) Tespit Edildi: {Path.GetFileName(filePath)}", filePath);
                 hasIssue = true;
                 fixNewline = true;
             }
             if (new TabScanner().HasIssue(span))
             {
-                LogToConsole($"⚠️ [UYARI] Sekme (Tab) Kullanımı Tespit Edildi: {Path.GetFileName(filePath)}");
+                LogToConsole($"⚠️ [UYARI] Sekme (Tab) Kullanımı Tespit Edildi: {Path.GetFileName(filePath)}", filePath);
                 hasIssue = true;
                 fixTab = true;
             }
             if (new HardcodedPasswordScanner().HasIssue(span))
             {
-                LogToConsole($"⚠️ [UYARI] Doğrudan Yazılmış Şifre (Hardcoded Password) Tespit Edildi: {Path.GetFileName(filePath)}");
+                LogToConsole($"⚠️ [UYARI] Doğrudan Yazılmış Şifre (Hardcoded Password) Tespit Edildi: {Path.GetFileName(filePath)}", filePath);
                 hasIssue = true;
                 fixPassword = true;
             }
 
+            if (config.EnabledModules.TryGetValue("EntropyScanner", out bool isEntropyEnabled) && isEntropyEnabled)
+            {
+                if (new EntropyScanner().HasIssue(span))
+                {
+                    LogToConsole($"⚠️ [UYARI] Yüksek Entropili Gizli Veri / API Anahtarı Tespit Edildi: {Path.GetFileName(filePath)}", filePath);
+                    hasIssue = true;
+                }
+            }
+
+            var regexScanner = new RegexScanner(config.CustomRules);
+            string textContentForRegex = Encoding.UTF8.GetString(span.ToArray());
+            string? violatedRule = regexScanner.GetFirstViolation(textContentForRegex);
+            if (violatedRule != null)
+            {
+                LogToConsole($"⚠️ [UYARI] Özel Kural (Regex) İhlali Tespit Edildi: {violatedRule}", filePath);
+                hasIssue = true;
+                fixCustomRule = true;
+            }
+
             if (!hasIssue)
             {
-                LogToConsole($"✅ [TEMİZ] Dosya sorunsuz: {Path.GetFileName(filePath)}");
-                _dashboardView?.UpdateDashboard(filePath, "Temiz", new SolidColorBrush(Color.Parse("#A6E3A1")));
+                LogToConsole($"✅ [TEMİZ] Dosya sorunsuz: {Path.GetFileName(filePath)}", filePath);
+            _uiActionQueue.Enqueue(() => _dashboardView?.UpdateDashboard(filePath, "Temiz", new SolidColorBrush(Color.Parse("#A6E3A1"))));
                 _pendingFixFiles.Remove(filePath);
                 UpdateFixButton();
+                FileCacheManager.UpdateCache(filePath, hasIssues: false);
             }
             else
             {
                 // Hata var, AutoFix (Otomatik Onarım) ayarını kontrol et
                 if (config.AutoFix && allowAutoFix)
                 {
-                    _dashboardView?.UpdateDashboard(filePath, "Onarıldı", new SolidColorBrush(Color.Parse("#89B4FA")));
-                    LogToConsole($"🛠️ [AUTO-FIX] Otomatik onarım başlatılıyor: {Path.GetFileName(filePath)}");
+                _uiActionQueue.Enqueue(() => _dashboardView?.UpdateDashboard(filePath, "Onarıldı", new SolidColorBrush(Color.Parse("#89B4FA"))));
+                    LogToConsole($"🛠️ [AUTO-FIX] Otomatik onarım başlatılıyor: {Path.GetFileName(filePath)}", filePath);
                     
                     if (config.BackupEnabled)
                     {
                         var backupMgr = new BackupManager(Environment.CurrentDirectory);
                         backupMgr.BackupFile(filePath);
-                        LogToConsole($"🛡️ [YEDEKLEME] Orijinal dosya onarım öncesi güvenliğe alındı.");
+                        LogToConsole($"🛡️ [YEDEKLEME] Orijinal dosya onarım öncesi güvenliğe alındı.", filePath);
                     }
 
                     List<byte> outputBytes = new List<byte>(content);
@@ -594,7 +595,7 @@ public partial class MainWindow : Window
                     if (fixBom) outputBytes.RemoveRange(0, 3);
                     
                     // 2. CRLF ve Hayalet Karakter Temizliği (String üzerinden güvenli silme)
-                    if (fixCrlf || fixGhost || fixTab || fixPassword)
+                    if (fixCrlf || fixGhost || fixTab || fixPassword || fixCustomRule)
                     {
                         string tempText = Encoding.UTF8.GetString(outputBytes.ToArray());
                         if (fixCrlf) tempText = tempText.Replace("\r\n", "\n");
@@ -605,6 +606,11 @@ public partial class MainWindow : Window
                             // Şifre tanımını yakala ve sadece değer kısmını maskele (örn: password: "[MASKED_BY_DEVGUARD]" -> password: "[MASKED_BY_DEVGUARD]")
                             var regex = new System.Text.RegularExpressions.Regex(@"((password|passwd|pass|secret)\s*[:=]\s*)(['""])(.*?)\3", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                             tempText = regex.Replace(tempText, "$1$3[MASKED_BY_DEVGUARD]$3");
+                        }
+                        if (fixCustomRule)
+                        {
+                            // RegexScanner'ı tekrar kullan
+                            tempText = regexScanner.ApplyFixes(tempText);
                         }
                         outputBytes = new List<byte>(new UTF8Encoding(false).GetBytes(tempText));
                     }
@@ -617,27 +623,53 @@ public partial class MainWindow : Window
                     }
                     
                     File.WriteAllBytes(filePath, outputBytes.ToArray());
-                    LogToConsole($"✨ [BAŞARILI] Dosya onarıldı ve kaydedildi: {Path.GetFileName(filePath)}");
+                    LogToConsole($"✨ [BAŞARILI] Dosya onarıldı ve kaydedildi: {Path.GetFileName(filePath)}", filePath);
                     _pendingFixFiles.Remove(filePath);
                     UpdateFixButton();
+                    FileCacheManager.UpdateCache(filePath, hasIssues: false);
                 }
                 else
                 {
-                    _dashboardView?.UpdateDashboard(filePath, "Sorunlu", new SolidColorBrush(Color.Parse("#F38BA8")));
+                _uiActionQueue.Enqueue(() => _dashboardView?.UpdateDashboard(filePath, "Sorunlu", new SolidColorBrush(Color.Parse("#F38BA8"))));
                     _pendingFixFiles.Add(filePath);
                     UpdateFixButton();
+                    FileCacheManager.UpdateCache(filePath, hasIssues: true);
                 }
             }
         }
         catch (Exception ex)
         {
-            LogToConsole($"❌ HATA: {Path.GetFileName(filePath)} okunamadı -> {ex.Message}");
+            LogToConsole($"❌ HATA: {Path.GetFileName(filePath)} okunamadı -> {ex.Message}", filePath);
         }
     }
 
-    public void LogToConsole(string message)
+    public void LogToConsole(string message, string? sourceFile = null)
     {
-        Dispatcher.UIThread.Post(() =>
+        // Arka planda çalışan modülleri tetikle (UI'ı kilitlemeden)
+        Task.Run(() =>
+        {
+            try
+            {
+                var config = BomConfigManager.LoadConfig(Path.Combine(Environment.CurrentDirectory, ".bomconfig"));
+                
+                // Modül 1: AutoLogger (Metin dosyasına yazar)
+                if (config.EnabledModules.TryGetValue("AutoLogger", out bool isAutoLogEnabled) && isAutoLogEnabled)
+                {
+                    string logFile = Path.Combine(Environment.CurrentDirectory, "devguard_auto.log");
+                    string logEntry = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}{Environment.NewLine}";
+                    File.AppendAllText(logFile, logEntry);
+                }
+                
+                // Modül 2: SqliteLogger (Veritabanına yazar)
+                if (config.EnabledModules.TryGetValue("SqliteLogger", out bool isDbLogEnabled) && isDbLogEnabled)
+                {
+                    SqliteLogger.Log("INFO", message, sourceFile);
+                }
+            }
+            catch { /* Dosya kilitlenmesi veya diğer hatalarda uygulamanın çökmesini engelle */ }
+        });
+
+        _uiActionQueue.Enqueue(() =>
         {
             var consolePanel = this.Find<StackPanel>("LiveConsolePanel");
             var scroller = this.Find<ScrollViewer>("ConsoleScroller");
@@ -653,6 +685,14 @@ public partial class MainWindow : Window
                     FontFamily = FontFamily.Parse("Consolas, Courier New"),
                     TextWrapping = TextWrapping.Wrap
                 };
+
+                // Eğer log bir dosyayla ilişkiliyse, çift tıklama ile açılabilmesi için Tag'e yolu ekle
+                if (!string.IsNullOrEmpty(sourceFile) && File.Exists(sourceFile))
+                {
+                    textBlock.Tag = sourceFile;
+                    textBlock.Cursor = new Cursor(StandardCursorType.Hand);
+                    textBlock.DoubleTapped += ConsoleLog_DoubleTapped;
+                }
 
                 if (message.Contains("❌ HATA") || message.Contains("REDDEDİLDİ") || message.Contains("API BAĞLANTI HATASI"))
                 {
@@ -675,15 +715,40 @@ public partial class MainWindow : Window
         });
     }
 
+    private void ConsoleLog_DoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (sender is TextBlock textBlock && textBlock.Tag is string filePath)
+        {
+            if (File.Exists(filePath))
+            {
+                try
+                {
+                    var processInfo = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = OperatingSystem.IsWindows() ? "cmd.exe" : "code",
+                        Arguments = OperatingSystem.IsWindows() ? $"/c code \"{filePath}\"" : $"\"{filePath}\"",
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    System.Diagnostics.Process.Start(processInfo);
+                }
+                catch (Exception ex)
+                {
+                    LogToConsole($"❌ HATA: VS Code açılamadı: {ex.Message}");
+                }
+            }
+        }
+    }
+
     private void OnFileChange(string filePath)
     {
         if (_lockManager.IsLocked(filePath))
         {
-            LogToConsole($"⏳ İPTAL EDİLDİ: {Path.GetFileName(filePath)} şu an IDE tarafından işleniyor. Çakışma önlendi.");
+            LogToConsole($"⏳ İPTAL EDİLDİ: {Path.GetFileName(filePath)} şu an IDE tarafından işleniyor. Çakışma önlendi.", filePath);
             return; // Dosya IDE tarafından onarılıyor, arka plan ajanı koda dokunamaz!
         }
 
-        LogToConsole($"🔔 (SİSTEM DAEMON) Arka planda dosya değişikliği yakalandı: {Path.GetFileName(filePath)}");
+        LogToConsole($"🔔 (SİSTEM DAEMON) Arka planda dosya değişikliği yakalandı: {Path.GetFileName(filePath)}", filePath);
         
         // Arka planda taramayı başlat (Geliştiricinin editörüne müdahale etmemek için otomatik onarımı zorla kapat)
         Dispatcher.UIThread.Post(() =>
@@ -712,6 +777,28 @@ public partial class MainWindow : Window
         LogToConsole("GUI Kapatıldı -> Arka Planda Sessiz İzleme Modu Devrede...");
     }
 
+    public void ClearAutoLog_Click(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            string logFile = Path.Combine(Environment.CurrentDirectory, "devguard_auto.log");
+            if (File.Exists(logFile))
+            {
+                // Dosyayı tamamen boşaltır (silmez, içini temizler)
+                File.WriteAllText(logFile, string.Empty);
+                LogToConsole("🗑️ Otomatik kayıt dosyası (devguard_auto.log) başarıyla temizlendi.");
+            }
+            else
+            {
+                LogToConsole("⚠️ Temizlenecek log dosyası bulunamadı (devguard_auto.log).");
+            }
+        }
+        catch (Exception ex)
+        {
+            LogToConsole($"❌ HATA: Log dosyası temizlenirken hata oluştu -> {ex.Message}");
+        }
+    }
+
     public void InstallGitHook_Click(object? sender, RoutedEventArgs e)
     {
         try
@@ -728,8 +815,25 @@ public partial class MainWindow : Window
             string preCommitPath = Path.Combine(gitHooksDir, "pre-commit");
             string hookScript = "#!/bin/sh\n" +
                                 "echo \"[DevGuard] Pre-commit hook devrede. Kodlar taranıyor...\"\n" +
-                                "# TODO: NoBOMSuite CLI çağrısı entegre edilecek\n" +
-                                "echo \"[DevGuard] Her şey temiz, commit'e izin verildi!\"\n" +
+                                "STAGED_FILES=$(git diff --cached --name-only)\n" +
+                                "if [ -z \"$STAGED_FILES\" ]; then\n" +
+                                "    echo \"[DevGuard] Taranacak staged dosya bulunamadı.\"\n" +
+                                "    exit 0\n" +
+                                "fi\n" +
+                                "HAS_ERRORS=0\n" +
+                                "for file in $STAGED_FILES; do\n" +
+                                "    if [ -f \"$file\" ]; then\n" +
+                                "        dotnet run --project SanitizerKit.CLI.csproj -- \"$file\"\n" +
+                                "        if [ $? -ne 0 ]; then\n" +
+                                "            HAS_ERRORS=1\n" +
+                                "        fi\n" +
+                                "    fi\n" +
+                                "done\n" +
+                                "if [ $HAS_ERRORS -ne 0 ]; then\n" +
+                                "    echo \"❌ [DevGuard] HATA: Commit engellendi! Sorunlu dosyaları düzeltin.\"\n" +
+                                "    exit 1\n" +
+                                "fi\n" +
+                                "echo \"✅ [DevGuard] Tarama başarılı. Her şey temiz, commit'e izin verildi!\"\n" +
                                 "exit 0\n";
 
             File.WriteAllText(preCommitPath, hookScript);
@@ -751,15 +855,30 @@ public partial class MainWindow : Window
 
     public async void InstallVsCodeExtension_Click(object? sender, RoutedEventArgs e)
     {
+        // GitHub'daki yayınlanmış son sürümden .vsix dosyasını çeken URL (placeholder)
+        const string vsixUrl = "https://github.com/your-repo-owner/NoBOMSuite/releases/latest/download/devguard-0.0.1.vsix";
+        string tempVsixPath = Path.Combine(Path.GetTempPath(), "devguard.vsix");
+
         try
         {
-            LogToConsole("⏳ VS Code Eklentisi kuruluyor, lütfen bekleyin...");
+            LogToConsole($"⏳ VS Code Eklentisi indiriliyor: {vsixUrl}");
             
-            // Gerçek senaryoda .vsix dosyası projenin içinden çıkarılır, biz şimdilik komutu simüle ediyoruz.
+            using (var httpClient = new HttpClient())
+            {
+                var response = await httpClient.GetAsync(vsixUrl);
+                response.EnsureSuccessStatusCode();
+                using (var fs = new FileStream(tempVsixPath, FileMode.Create))
+                {
+                    await response.Content.CopyToAsync(fs);
+                }
+            }
+            
+            LogToConsole("✅ İndirme tamamlandı. Eklenti kuruluyor...");
+
             var processInfo = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = OperatingSystem.IsWindows() ? "cmd.exe" : "code",
-                Arguments = OperatingSystem.IsWindows() ? "/c code --install-extension devguard.vsix" : "--install-extension devguard.vsix",
+                Arguments = OperatingSystem.IsWindows() ? $"/c code --install-extension \"{tempVsixPath}\"" : $"--install-extension \"{tempVsixPath}\"",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -770,17 +889,38 @@ public partial class MainWindow : Window
             if (process != null)
             {
                 await process.WaitForExitAsync();
-                // Eklenti dosyası (henüz üretmediğimiz için) bulanamayacaktır.
-                // Burada simülasyon olarak kodun çalıştığını varsayarak konsola başarılı/hata simülasyonu yazıyoruz.
-                    LogToConsole($"✅ SİMÜLASYON BAŞARILI: 'code --install-extension' CLI komutu tetiklendi.");
+                string output = await process.StandardOutput.ReadToEndAsync();
+                string error = await process.StandardError.ReadToEndAsync();
+
+                if (process.ExitCode == 0 && (output.Contains("successfully") || output.Contains("başarıyla")))
+                {
+                    LogToConsole($"✅ BAŞARILI: DevGuard VS Code eklentisi kuruldu.");
+                }
+                else
+                {
+                    LogToConsole($"❌ HATA: Eklenti kurulurken sorun oluştu.");
+                    if (!string.IsNullOrWhiteSpace(output)) LogToConsole($"   Çıktı: {output}");
+                    if (!string.IsNullOrWhiteSpace(error)) LogToConsole($"   Hata: {error}");
+                }
             }
+        }
+        catch (HttpRequestException httpEx)
+        {
+            LogToConsole($"❌ HATA: Eklenti indirilemedi. URL'yi kontrol edin. -> {httpEx.Message}");
         }
         catch (Exception ex)
         {
-                LogToConsole($"❌ HATA: Kurulum sihirbazı başlatılamadı (Sisteminizde VS Code yüklü mü?) -> {ex.Message}");
+            LogToConsole($"❌ HATA: Kurulum sihirbazı başlatılamadı (Sisteminizde VS Code yüklü mü?) -> {ex.Message}");
+        }
+        finally
+        {
+            if (File.Exists(tempVsixPath))
+            {
+                try { File.Delete(tempVsixPath); }
+                catch (Exception ex) { LogToConsole($"⚠️ UYARI: Geçici eklenti dosyası silinemedi. -> {ex.Message}"); }
+            }
         }
     }
-
     public async void ExportPortable_Click(object? sender, RoutedEventArgs e)
     {
         try
@@ -879,6 +1019,10 @@ public partial class MainWindow : Window
                 LogToConsole($"⚠️ [UYARI] Wasm dosyaları bulunamadı: {wasmSourceDir}");
             }
 
+            // 5. SQLite Log Veritabanı Altyapısını Hazırla
+            LogDatabaseManager.InitializeDatabase(Path.Combine(exportDir, "devguard_logs.db"));
+            LogToConsole("  - SQLite Log Veritabanı (devguard_logs.db) altyapısı oluşturuldu.");
+
             LogToConsole($"✅ BAŞARILI: Taşınabilir sürüm başarıyla oluşturuldu -> {exportDir}");
         }
         catch (Exception ex)
@@ -912,23 +1056,60 @@ public partial class MainWindow : Window
         if (Application.Current != null)
         {
             var currentTheme = Application.Current.RequestedThemeVariant;
-            Application.Current.RequestedThemeVariant = currentTheme == Avalonia.Styling.ThemeVariant.Dark 
-                ? Avalonia.Styling.ThemeVariant.Light 
-                : Avalonia.Styling.ThemeVariant.Dark;
-                
-            LogToConsole($"🎨 Tema değiştirildi: {Application.Current.RequestedThemeVariant?.ToString()}");
+            
+            if (currentTheme == Avalonia.Styling.ThemeVariant.Dark)
+                Application.Current.RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Light;
+            else if (currentTheme == Avalonia.Styling.ThemeVariant.Light)
+                Application.Current.RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Default;
+            else
+                Application.Current.RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Dark;
+
+            string themeName = Application.Current.RequestedThemeVariant == Avalonia.Styling.ThemeVariant.Default ? "Sistem (Otomatik)" : Application.Current.RequestedThemeVariant?.ToString() ?? "Bilinmiyor";
+            LogToConsole($"🎨 Tema değiştirildi: {themeName}");
         }
     }
 
-    private void ShowSolutionReviewDialog(string patchJson)
+    private void ShowSolutionReviewDialog(string patchJson, string filePath, string originalCode)
     {
         Dispatcher.UIThread.Post(async () =>
         {
-            var window = new SolutionReviewWindow(patchJson);
+            var window = new SolutionReviewWindow(patchJson, filePath, originalCode);
             var result = await window.ShowDialog<bool>(this);
             if (result)
             {
                 LogToConsole("✅ [SİSTEM] Kullanıcı yamayı onayladı ve kod başarıyla uygulandı.");
+                
+                _notificationManager?.Show(new Notification(
+                    "AI Onarımı Başarılı",
+                    $"✨ {Path.GetFileName(filePath)} dosyası yapay zeka tarafından onarıldı ve güvenlik onayı aldı.",
+                    NotificationType.Success,
+                    TimeSpan.FromSeconds(5)));
+
+                // AI Tarafından Üretilen Reçeteyi .bomconfig'e Otomatik Kaydet
+                try
+                {
+                    using var doc = JsonDocument.Parse(patchJson);
+                    if (doc.RootElement.TryGetProperty("suggestedRecipe", out var recipe) && recipe.ValueKind == JsonValueKind.Object)
+                    {
+                        string ruleName = recipe.TryGetProperty("ruleName", out var rn) ? rn.GetString() ?? "AI_Rule" : "AI_Rule";
+                        string pattern = recipe.TryGetProperty("regexPattern", out var rp) ? rp.GetString() ?? "" : "";
+                        string replacement = recipe.TryGetProperty("replacement", out var rep) ? rep.GetString() ?? "" : "";
+
+                        if (!string.IsNullOrEmpty(pattern))
+                        {
+                            var configPath = Path.Combine(Environment.CurrentDirectory, ".bomconfig");
+                            var config = BomConfigManager.LoadConfig(configPath);
+                            config.CustomRules[pattern] = replacement;
+                            BomConfigManager.SaveConfig(configPath, config);
+                            
+                            LogToConsole($"🧠 [SİSTEM] AI öğrenmesi başarılı! Yeni kural kaydedildi: {ruleName}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogToConsole($"⚠️ [SİSTEM] AI Kuralı kaydedilirken uyarı: {ex.Message}");
+                }
             }
             else
             {
@@ -949,15 +1130,32 @@ public partial class MainWindow : Window
         {
             // Test amaçlı temsili bir kural ihlali senaryosu oluşturuyoruz
             string encryptedKey = LocalAiFirewall.EncryptApiKey("sk-TEST_KEY_12345");
+            string dummyFilePath = "c:/project/auth.js";
             string dummyCode = "def secure_login(password):\n    # TODO: remove hardcoded pass\n    return password == '123'";
             string errorMessage = "Güvenlik İhlali: Koda doğrudan parola (hardcoded password) yazılmış.";
 
             // AI Orkestratörünü tetikle, loglar event üzerinden otomatik olarak 'LiveConsolePanel'e akacak
-            await _aiOrchestrator.ProcessErrorLiveAsync(dummyCode, errorMessage, encryptedKey);
+            await _aiOrchestrator.ProcessErrorLiveAsync(dummyFilePath, dummyCode, errorMessage, encryptedKey);
         }
         catch (Exception ex)
         {
             LogToConsole($"❌ HATA: AI Testi sırasında beklenmeyen bir sorun oluştu -> {ex.Message}");
+        }
+    }
+
+    private async void ShowWelcomeTourIfNeeded()
+    {
+        var configPath = Path.Combine(Environment.CurrentDirectory, ".bomconfig");
+        var config = BomConfigManager.LoadConfig(configPath);
+
+        if (!config.HasSeenWelcomeTour)
+        {
+            // Yeni pencereyi UI thread üzerinde oluşturup göster
+            var welcomeWindow = new WelcomeWindow();
+            await welcomeWindow.ShowDialog(this);
+
+            config.HasSeenWelcomeTour = true;
+            BomConfigManager.SaveConfig(configPath, config);
         }
     }
 
@@ -1018,6 +1216,14 @@ public partial class MainWindow : Window
         }
     }
 
+    public void ManualPathInput_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            ManualScan_Click(sender, new RoutedEventArgs());
+        }
+    }
+
     public void HiddenWaylandDropZone_TextChanged(object? sender, TextChangedEventArgs e)
     {
         var tb = sender as TextBox;
@@ -1025,7 +1231,7 @@ public partial class MainWindow : Window
         {
             string droppedText = tb.Text;
             
-            // TextBox durumunu bozmamak için metni UI thread üzerinde asenkron olarak temizle
+            // TextBox'ı kilitlememesi için metni asenkron olarak hemen temizle
             Dispatcher.UIThread.Post(() => 
             {
                 tb.Text = string.Empty;
@@ -1039,18 +1245,10 @@ public partial class MainWindow : Window
 
                 if (File.Exists(path) || Directory.Exists(path))
                 {
-                    LogToConsole($"🎯 Otomatik Sürükle-Bırak (Wayland) Algılandı: {path}");
+                    LogToConsole($"🎯 Sürükle-Bırak (Wayland Hack) Algılandı: {path}");
                     ScanPath(path);
                 }
             }
-        }
-    }
-
-    public void ManualPathInput_KeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter)
-        {
-            ManualScan_Click(sender, new RoutedEventArgs());
         }
     }
 }

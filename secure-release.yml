@@ -38,6 +38,10 @@ jobs:
       - name: Restore Solution Dependencies
         run: dotnet restore NoBOMSuite.sln
 
+      - name: Run Unit Tests (Mock AI & Scanners)
+        # Çekirdek motor, Scanner'lar ve Mocklanmış AI ajanları dahil tüm testleri çalıştırır
+        run: dotnet test NoBOMSuite.sln --no-restore --verbosity normal
+
       - name: Publish Native CLI (NativeAOT)
         run: dotnet publish SanitizerKit.CLI/SanitizerKit.CLI.csproj -c Release -r ${{ matrix.rid }} --no-restore -o ./artifacts/cli
 

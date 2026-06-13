@@ -5,11 +5,22 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using SanitizerKit.Core.Scanners;
+using SanitizerKit.Core.Caching;
+using SanitizerKit.Core.Config;
 
 namespace InvokeScan
 {
     class Program
     {
+        public class ScanResult
+        {
+            public string FilePath { get; set; } = string.Empty;
+            public bool HasIssue { get; set; }
+            public List<string> Issues { get; set; } = new();
+        }
+
+        static readonly List<ScanResult> ScanResults = new();
+
         // Taranmayacak sistem/derleme klasörleri
         static readonly HashSet<string> IgnoredDirs = new(StringComparer.OrdinalIgnoreCase) 
         { 
@@ -18,20 +29,57 @@ namespace InvokeScan
 
         static int Main(string[] args)
         {
-            if (args.Length == 0 || args.Contains("--help") || args.Contains("-h"))
+            if (args.Contains("--help") || args.Contains("-h"))
             {
-                Console.WriteLine("🛡️  DevGuard (NoBOMSuite) CLI - Komut Satırı Tarayıcısı");
-                Console.WriteLine("Kullanım: SanitizerKit.CLI <dosya_veya_klasor_yolu> [seçenekler]");
-                Console.WriteLine("\nSeçenekler:");
-                Console.WriteLine("  --help, -h       Bu yardım menüsünü gösterir.");
-                Console.WriteLine("  --auto-fix       Tespit edilen sorunları anında otomatik onarır.");
-                Console.WriteLine("  --interactive    Sorun bulunduğunda onarmak için kullanıcıya sorar.");
+                ShowHelp();
                 return 0;
             }
 
-            var path = args.FirstOrDefault(a => !a.StartsWith("-")) ?? ".";
+            var path = ".";
             bool autoFix = args.Contains("--auto-fix");
             bool interactive = args.Contains("--interactive");
+            bool formatJunit = false;
+            string junitReportPath = "junit-report.xml";
+
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (args[i] == "--auto-fix")
+                {
+                    autoFix = true;
+                }
+                else if (args[i] == "--interactive")
+                {
+                    interactive = true;
+                }
+                else if (args[i] == "--format" && i + 1 < args.Length)
+                {
+                    if (args[i + 1].Equals("junit", StringComparison.OrdinalIgnoreCase))
+                    {
+                        formatJunit = true;
+                    }
+                    i++;
+                }
+                else if (args[i].StartsWith("--format=", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (args[i].Substring(9).Equals("junit", StringComparison.OrdinalIgnoreCase))
+                    {
+                        formatJunit = true;
+                    }
+                }
+                else if (args[i] == "--output" && i + 1 < args.Length)
+                {
+                    junitReportPath = args[i + 1];
+                    i++;
+                }
+                else if (args[i].StartsWith("--output=", StringComparison.OrdinalIgnoreCase))
+                {
+                    junitReportPath = args[i].Substring(9);
+                }
+                else if (!args[i].StartsWith("-"))
+                {
+                    path = args[i];
+                }
+            }
 
             if (!File.Exists(path) && !Directory.Exists(path))
             {
@@ -64,7 +112,24 @@ namespace InvokeScan
                 Console.WriteLine("\n✅ Mükemmel! Tüm dosyalar temiz.");
             }
 
+            if (formatJunit)
+            {
+                ExportJUnitReport(junitReportPath, ScanResults);
+            }
+
             return (issueCount > 0 && fixedCount < issueCount) ? 1 : 0;
+        }
+
+        static void ShowHelp()
+        {
+            Console.WriteLine("🛡️  DevGuard (NoBOMSuite) CLI - Komut Satırı Tarayıcısı");
+            Console.WriteLine("Kullanım: SanitizerKit.CLI <dosya_veya_klasor_yolu> [seçenekler]");
+            Console.WriteLine("\nSeçenekler:");
+            Console.WriteLine("  --help, -h       Bu yardım menüsünü gösterir.");
+            Console.WriteLine("  --auto-fix       Tespit edilen sorunları anında otomatik onarır.");
+            Console.WriteLine("  --interactive    Sorun bulunduğunda onarmak için kullanıcıya sorar.");
+            Console.WriteLine("  --format junit   JUnit XML formatında rapor üretir.");
+            Console.WriteLine("  --output <path>  JUnit XML rapor dosyasının kaydedileceği yol (Varsayılan: junit-report.xml).");
         }
 
         static void ScanDirectory(string dir, ref int scannedCount, ref int issueCount, ref int fixedCount, bool autoFix, bool interactive)
@@ -97,12 +162,24 @@ namespace InvokeScan
             string[] binaryExts = { ".exe", ".dll", ".png", ".jpg", ".zip", ".bin", ".so", ".dylib" };
             if (Array.IndexOf(binaryExts, ext) >= 0) return;
 
+            // Önbellek kontrolü (Incremental Scan)
+            if (FileCacheManager.IsCacheValid(path, out bool cachedHasIssues))
+            {
+                if (!cachedHasIssues)
+                {
+                    scannedCount++;
+                    ScanResults.Add(new ScanResult { FilePath = path, HasIssue = false });
+                    return; // Temiz ve değişmemiş dosya, taramayı es geç.
+                }
+            }
+
             try
             {
                 byte[] content = File.ReadAllBytes(path);
                 var span = new ReadOnlySpan<byte>(content);
                 scannedCount++;
 
+                var result = new ScanResult { FilePath = path };
                 bool hasIssue = false;
                 var issues = new List<string>();
                 bool fixBom = false, fixCrlf = false, fixGhost = false, fixNewline = false, fixTab = false, fixPassword = false;
@@ -114,10 +191,18 @@ namespace InvokeScan
                 if (new TabScanner().HasIssue(span)) { hasIssue = true; issues.Add("Tab"); fixTab = true; }
                 if (new HardcodedPasswordScanner().HasIssue(span)) { hasIssue = true; issues.Add("HardcodedPass"); fixPassword = true; }
 
+                var config = BomConfigManager.LoadConfig(Path.Combine(Environment.CurrentDirectory, ".bomconfig"));
+                if (config.EnabledModules.TryGetValue("EntropyScanner", out bool isEntropyEnabled) && isEntropyEnabled)
+                {
+                    if (new EntropyScanner().HasIssue(span)) { hasIssue = true; issues.Add("HighEntropySecret"); }
+                }
+
                 if (hasIssue)
                 {
                     issueCount++;
                     Console.WriteLine($"[SORUN] {path} -> ({string.Join(", ", issues)})");
+                    result.HasIssue = true;
+                    result.Issues.AddRange(issues);
 
                     bool shouldFix = autoFix;
                     
@@ -159,12 +244,73 @@ namespace InvokeScan
                         File.WriteAllBytes(path, outputBytes.ToArray());
                         Console.WriteLine($"  ✨ [ONARILDI] {path}");
                         fixedCount++;
+                        FileCacheManager.UpdateCache(path, hasIssues: false);
+                    }
+                    else
+                    {
+                        FileCacheManager.UpdateCache(path, hasIssues: true);
                     }
                 }
+                else
+                {
+                    FileCacheManager.UpdateCache(path, hasIssues: false);
+                }
+
+                ScanResults.Add(result);
             }
             catch
             {
                 // Okunamayan dosyaları sessizce atla
+            }
+        }
+
+        static string EscapeXml(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return string.Empty;
+            return value.Replace("&", "&amp;")
+                        .Replace("<", "&lt;")
+                        .Replace(">", "&gt;")
+                        .Replace("\"", "&quot;")
+                        .Replace("'", "&apos;");
+        }
+
+        static void ExportJUnitReport(string outputPath, List<ScanResult> results)
+        {
+            try
+            {
+                var sb = new StringBuilder();
+                sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+                int totalTests = results.Count;
+                int totalFailures = results.Count(r => r.HasIssue);
+                
+                sb.AppendLine($"<testsuites name=\"DevGuard Scan\" tests=\"{totalTests}\" failures=\"{totalFailures}\" time=\"0.0\">");
+                sb.AppendLine($"  <testsuite name=\"DevGuard Scan\" tests=\"{totalTests}\" failures=\"{totalFailures}\" id=\"0\" time=\"0.0\">");
+
+                foreach (var result in results)
+                {
+                    string safePath = EscapeXml(result.FilePath);
+                    sb.AppendLine($"    <testcase name=\"{safePath}\" classname=\"DevGuardScanner\" time=\"0.0\">");
+                    if (result.HasIssue)
+                    {
+                        string issuesStr = string.Join(", ", result.Issues);
+                        string safeIssues = EscapeXml(issuesStr);
+                        sb.AppendLine($"      <failure message=\"Issues found: {safeIssues}\" type=\"DevGuardFailure\">");
+                        sb.AppendLine($"        File: {safePath}");
+                        sb.AppendLine($"        Issues: {safeIssues}");
+                        sb.AppendLine("      </failure>");
+                    }
+                    sb.AppendLine("    </testcase>");
+                }
+
+                sb.AppendLine("  </testsuite>");
+                sb.AppendLine("</testsuites>");
+
+                File.WriteAllText(outputPath, sb.ToString(), Encoding.UTF8);
+                Console.WriteLine($"\n📋 JUnit XML Raporu kaydedildi: {Path.GetFullPath(outputPath)}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"\n❌ Rapor yazılırken hata oluştu: {ex.Message}");
             }
         }
     }

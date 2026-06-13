@@ -1,5 +1,5 @@
 {
-  "AutoFix": false,
+  "AutoFix": true,
   "BackupEnabled": true,
   "StrictOfflineMode": true,
   "TabSize": 4,
@@ -10,5 +10,14 @@
     ".jpg",
     ".zip"
   ],
-  "CustomRules": {}
+  "CustomRules": {},
+  "EnabledModules": {
+    "AutoLogger": true,
+    "SqliteLogger": false
+  },
+  "AiTemperature": 0.2,
+  "HasSeenWelcomeTour": true,
+  "AiProvider": "OpenAI",
+  "OllamaEndpoint": "http://localhost:11434",
+  "OllamaModel": "qwen2.5-coder:7b"
 }

@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="NoBOMSuite.Desktop.LogViewerView">
+    <Grid RowDefinitions="Auto, *" Margin="5">
+        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10" Margin="10">
+            <TextBlock Text="Seviye:" VerticalAlignment="Center" Foreground="#BAC2DE" />
+            <ComboBox x:Name="LogLevelFilter" SelectedIndex="0" Width="120" SelectionChanged="LogLevelFilter_SelectionChanged">
+                <ComboBoxItem>Tümü</ComboBoxItem>
+                <ComboBoxItem>INFO</ComboBoxItem>
+                <ComboBoxItem>WARNING</ComboBoxItem>
+                <ComboBoxItem>ERROR</ComboBoxItem>
+            </ComboBox>
+            <Button Content="🔄 Logları Yenile" Click="RefreshButton_Click" 
+                    Background="#89B4FA" Foreground="#11111B" FontWeight="Bold"/>
+        </StackPanel>
+        
+        <DataGrid Grid.Row="1" ItemsSource="{Binding Logs}" AutoGenerateColumns="False"
+                  IsReadOnly="True" CanUserResizeColumns="True" Margin="5"
+                  BorderBrush="#313244" BorderThickness="1" 
+                  DoubleTapped="DataGrid_DoubleTapped" PointerWheelChanged="DataGrid_PointerWheelChanged">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="60"/>
+                <DataGridTextColumn Header="Zaman Damgası" Binding="{Binding Timestamp}" Width="200"/>
+                <DataGridTextColumn Header="Seviye" Binding="{Binding Level}" Width="80"/>
+                <DataGridTextColumn Header="Mesaj" Binding="{Binding Message}" Width="*"/>
+                <DataGridTextColumn Header="Kaynak Dosya" Binding="{Binding SourceFile}" Width="200"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</UserControl>

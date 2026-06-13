@@ -48,7 +48,11 @@ public class PatchGeneratorTests
             
             using var process = Process.Start(processInfo);
             Assert.NotNull(process);
+            string stdout = process.StandardOutput.ReadToEnd();
+            string stderr = process.StandardError.ReadToEnd();
             process.WaitForExit();
+            
+            Assert.True(process.ExitCode == 0, $"Python exit code: {process.ExitCode}. stdout: {stdout}, stderr: {stderr}");
             
             // 4. Assert: Hedef dosya değişti mi?
             string updatedContent = File.ReadAllText(targetPath);

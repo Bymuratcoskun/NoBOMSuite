@@ -1,5 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:lv="using:LiveChartsCore.SkiaSharpView.Avalonia"
+             xmlns:desktop="clr-namespace:NoBOMSuite.Desktop"
              x:Class="NoBOMSuite.Desktop.DashboardView">
     <Grid RowDefinitions="Auto, *" ColumnDefinitions="*, *" Margin="10">
         <!-- İstatistik Paneli -->
@@ -18,17 +20,25 @@
 
         <!-- Son Aktiviteler Listesi -->
         <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Margin="10" Background="{DynamicResource SystemControlBackgroundAltHighBrush}" CornerRadius="8">
-            <ListBox x:Name="ScanHistoryListBox" ItemsSource="{Binding ScanHistory}" Padding="5">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <Grid ColumnDefinitions="Auto, *, Auto" Margin="8,5" Width="600">
-                            <Ellipse Grid.Column="0" Width="10" Height="10" Fill="{Binding StatusColor}" VerticalAlignment="Center" Margin="0,0,15,0"/>
-                            <TextBlock Grid.Column="1" Text="{Binding FileName}" VerticalAlignment="Center" FontWeight="Medium"/>
-                            <TextBlock Grid.Column="2" Text="{Binding Timestamp}" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
-                        </Grid>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+            <TabControl>
+                <TabItem Header="Son Aktiviteler">
+                    <ListBox ItemsSource="{Binding ScanHistory}" Padding="5">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="desktop:ScanHistoryItem">
+                                <Grid ColumnDefinitions="Auto, *, Auto" Margin="8,5" Width="600">
+                                    <Ellipse Grid.Column="0" Width="10" Height="10" Fill="{Binding StatusColor}" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding FileName}" VerticalAlignment="Center" FontWeight="Medium"/>
+                                    <TextBlock Grid.Column="2" Text="{Binding Timestamp}" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </TabItem>
+                <TabItem Header="Son 24 Saatlik Aktivite Grafiği">
+                    <lv:CartesianChart Series="{Binding ActivitySeries}" Height="120" Margin="10"
+                                       XAxes="{Binding XAxes}" YAxes="{Binding YAxes}" TooltipPosition="Hidden"/>
+                </TabItem>
+            </TabControl>
         </Border>
     </Grid>
 </UserControl>

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
@@ -28,6 +28,16 @@
     <Compile Include="HardcodedPasswordScanner.cs" />
     <Compile Include="FixRecipeAiAgent.cs" />
     <Compile Include="IpcClient.cs" />
+    <Compile Include="LogDatabaseManager.cs" />
+    <Compile Include="SqliteLogger.cs" />
+    <Compile Include="RegexScanner.cs" />
+    <Compile Include="FileCacheManager.cs" />
+    <Compile Include="EntropyScanner.cs" />
+    <Compile Include="DiffHelper.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
   </ItemGroup>
 
 </Project>

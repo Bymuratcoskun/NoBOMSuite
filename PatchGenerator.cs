@@ -16,8 +16,10 @@ public class PatchGenerator
         sb.AppendLine("# ==========================================");
         sb.AppendLine("import sys, os, re");
         sb.AppendLine();
-        sb.AppendLine($"PATTERN = r'{regexPattern}'");
-        sb.AppendLine($"REPLACEMENT = '{replacement}'");
+        string escapedPattern = regexPattern.Replace("\"", "\\\"");
+        string escapedReplacement = replacement.Replace("\"", "\\\"");
+        sb.AppendLine($"PATTERN = r\"{escapedPattern}\"");
+        sb.AppendLine($"REPLACEMENT = \"{escapedReplacement}\"");
         sb.AppendLine();
         sb.AppendLine("def apply_patch(filepath):");
         sb.AppendLine("    try:");

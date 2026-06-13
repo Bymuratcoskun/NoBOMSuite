@@ -1,5 +1,7 @@
 using System;
 using System.Threading.Tasks;
+using System.IO;
+using SanitizerKit.Core.Config;
 using SanitizerKit.Core.AI;
 
 namespace SanitizerKit.UI.ViewModels;
@@ -13,7 +15,7 @@ public class AiOrchestrator
     
     // UI'daki arayüze log göndermek için event fırlatıcı
     public event Action<string>? OnLogMessage;
-    public event Action<string>? OnPatchReady;
+    public event Action<string, string, string>? OnPatchReady;
 
     public AiOrchestrator()
     {
@@ -22,13 +24,16 @@ public class AiOrchestrator
         _agent3 = new SecurityAiAgent();
     }
 
-    public async Task ProcessErrorLiveAsync(string rawCode, string errorMessage, string encryptedApiKey)
+    public async Task ProcessErrorLiveAsync(string filePath, string rawCode, string errorMessage, string encryptedApiKey)
     {
+        var config = BomConfigManager.LoadConfig(Path.Combine(Environment.CurrentDirectory, ".bomconfig"));
+        double aiTemp = config.AiTemperature;
+
         OnLogMessage?.Invoke("[SİSTEM] Çoklu Yapay Zeka Analiz zinciri başlatılıyor...");
 
         // --- 1. ADIM: Ajan 1 ile Teşhis ---
         OnLogMessage?.Invoke("\n[AJAN 1] Kod inceleniyor ve hatanın kök nedeni teşhis ediliyor...");
-        string diagnosticResult = await _agent1.AnalyzeIssueAsync(rawCode, errorMessage, encryptedApiKey);
+        string diagnosticResult = await _agent1.AnalyzeIssueAsync(rawCode, errorMessage, encryptedApiKey, temperature: aiTemp);
         OnLogMessage?.Invoke($"[AJAN 1 TEŞHİSİ]:\n{diagnosticResult}");
 
         if (diagnosticResult.Contains("HATA") || diagnosticResult.Contains("API"))
@@ -39,7 +44,7 @@ public class AiOrchestrator
 
         // --- 2. ADIM: Ajan 2 ile Çözüm Üretimi ---
         OnLogMessage?.Invoke("\n[AJAN 2] Çözüm kodu / reçete üretiliyor...");
-        string proposedFixJson = await _agent2.GenerateFixAsync(rawCode, errorMessage, diagnosticResult, encryptedApiKey);
+        string proposedFixJson = await _agent2.GenerateFixAsync(rawCode, errorMessage, diagnosticResult, encryptedApiKey, temperature: aiTemp);
         OnLogMessage?.Invoke($"[AJAN 2 ÇÖZÜM ÖNERİSİ (JSON)]:\n{proposedFixJson}");
 
         if (proposedFixJson.Contains("\"error\""))
@@ -50,13 +55,14 @@ public class AiOrchestrator
 
         // --- 3. ADIM: Ajan 3 ile Güvenlik Denetimi ---
         OnLogMessage?.Invoke("\n[AJAN 3] Çözüm önerisi güvenlik süzgecinden geçiriliyor...");
-        string securityVerdict = await _agent3.ValidateFixAsync(rawCode, proposedFixJson, encryptedApiKey);
+        // Ajan 3 her halükarda tamamen güvenlik denetimi yaptığı için sıcaklığı sabit ve katı (0.0) tutulur.
+        string securityVerdict = await _agent3.ValidateFixAsync(rawCode, proposedFixJson, encryptedApiKey, temperature: 0.0);
 
         if (securityVerdict.Contains("GÜVENLİ"))
         {
             OnLogMessage?.Invoke("[AJAN 3 ONAYI] Çözüm tamamen GÜVENLİ.");
             OnLogMessage?.Invoke("[SİSTEM] Çözüm İnceleme Penceresi açılıyor...");
-            OnPatchReady?.Invoke(proposedFixJson);
+            OnPatchReady?.Invoke(proposedFixJson, filePath, rawCode);
         }
         else
         {

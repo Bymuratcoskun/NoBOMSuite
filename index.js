@@ -1,4 +1,4 @@
-const ffi = require('ffi-napi');
+const koffi = require('koffi');
 const path = require('path');
 const os = require('os');
 
@@ -19,13 +19,15 @@ const libPath = path.join(__dirname, 'native', `SanitizerKit.Native${libExt}`);
 
 let devguard;
 try {
-    // C-API fonksiyon imzalarını tanımla
-    devguard = ffi.Library(libPath, {
-        'scan_bom': ['byte', ['char *', 'int']],
-        'scan_ghost_chars': ['byte', ['char *', 'int']],
-        'remove_bom': ['int', ['char *', 'int', 'char *']]
-        // Diğer fonksiyonlar buraya eklenebilir
-    });
+    // C-API fonksiyon imzalarını tanımla (Koffi ile Modernize Edildi)
+    const lib = koffi.load(libPath);
+    
+    devguard = {
+        scan_bom: lib.func('uint8_t scan_bom(const char *, int)'),
+        scan_ghost_chars: lib.func('uint8_t scan_ghost_chars(const char *, int)'),
+        remove_bom: lib.func('int remove_bom(const char *, int, char *)')
+        // Diğer fonksiyonlar buraya aynı mantıkla eklenebilir
+    };
 } catch (e) {
     throw new Error(`Native kütüphane yüklenemedi: ${libPath}. Lütfen kütüphanenin doğru yolda olduğundan emin olun. Detay: ${e.message}`);
 }

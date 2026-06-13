@@ -4,7 +4,9 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.IO;
 using SanitizerKit.Core.Security;
+using SanitizerKit.Core.Config;
 
 namespace SanitizerKit.Core.AI;
 
@@ -26,68 +28,127 @@ KATI KURALLAR:
 }
 Eğer hatanın genel bir yama kuralına (Regex) dönüştürülmesi mantıklı veya mümkün değilse, 'suggestedRecipe' kısmını null bırakabilirsin.";
 
-    public async Task<string> GenerateFixAsync(string rawCode, string errorMessage, string diagnosticInfo, string encryptedApiKey, string endpoint = "https://api.openai.com/v1/chat/completions")
+    public async Task<string> GenerateFixAsync(string rawCode, string errorMessage, string diagnosticInfo, string encryptedApiKey, string endpoint = "https://api.openai.com/v1/chat/completions", HttpClient? customClient = null, double temperature = 0.1)
     {
         // Güvenlik 1: Veri Maskeleme
         string maskedCode = LocalAiFirewall.MaskSensitiveData(rawCode);
         
+        var config = BomConfigManager.LoadConfig(Path.Combine(Environment.CurrentDirectory, ".bomconfig"));
+        bool isOllama = config.AiProvider.Equals("Ollama", StringComparison.OrdinalIgnoreCase);
+
         // Güvenlik 2: AES Şifre Çözücü
-        string apiKey = LocalAiFirewall.DecryptApiKey(encryptedApiKey);
-        
-        if (string.IsNullOrEmpty(apiKey))
-            return "{\"error\": \"API Anahtarı bulunamadı veya geçersiz.\"}";
-
-        // Güvenlik 3: Privacy Guard (Ağ Muhafızı)
-        using var client = PrivacyGuard.CreateSafeHttpClient(
-            strictOfflineMode: false, 
-            "api.openai.com", "api.anthropic.com", "api.groq.com", "generativelanguage.googleapis.com"
-        );
-
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-
-        var payload = new
+        string apiKey = string.Empty;
+        if (!isOllama)
         {
-            model = "gpt-3.5-turbo",
-            messages = new[]
+            apiKey = LocalAiFirewall.DecryptApiKey(encryptedApiKey);
+            if (string.IsNullOrEmpty(apiKey))
+                return "{\"error\": \"API Anahtarı bulunamadı veya geçersiz.\"}";
+        }
+
+        using var defaultClient = customClient == null ? PrivacyGuard.CreateSafeHttpClient(
+            strictOfflineMode: false,
+            "api.openai.com", "api.anthropic.com", "api.groq.com", "generativelanguage.googleapis.com") : null;
+        
+        var client = customClient ?? defaultClient!;
+
+        if (!isOllama)
+        {
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        }
+
+        // Endpoint belirle
+        string finalEndpoint = isOllama && endpoint == "https://api.openai.com/v1/chat/completions"
+            ? config.OllamaEndpoint.TrimEnd('/') + "/api/chat"
+            : endpoint;
+
+        object payload;
+        if (isOllama)
+        {
+            payload = new
             {
-                new { role = "system", content = SystemPrompt },
-                new { role = "user", content = $"Ajan 1 Teşhisi: {diagnosticInfo}\n\nHata Mesajı: {errorMessage}\n\nHatalı Kod:\n{maskedCode}" }
-            },
-            // Kod onarımı deterministik olmalı, halüsinasyonu engellemek için ısıyı (yaratıcılığı) sıfıra yakın (0.1) tutuyoruz.
-            temperature = 0.1,
-            response_format = new { type = "json_object" } // Sadece JSON dönmesini OpenAI API seviyesinde zorluyoruz
-        };
+                model = config.OllamaModel,
+                messages = new[]
+                {
+                    new { role = "system", content = SystemPrompt },
+                    new { role = "user", content = $"Ajan 1 Teşhisi: {diagnosticInfo}\n\nHata Mesajı: {errorMessage}\n\nHatalı Kod:\n{maskedCode}" }
+                },
+                stream = false,
+                format = "json",
+                options = new { temperature = temperature }
+            };
+        }
+        else
+        {
+            payload = new
+            {
+                model = "gpt-4o-mini",
+                messages = new[]
+                {
+                    new { role = "system", content = SystemPrompt },
+                    new { role = "user", content = $"Ajan 1 Teşhisi: {diagnosticInfo}\n\nHata Mesajı: {errorMessage}\n\nHatalı Kod:\n{maskedCode}" }
+                },
+                temperature = temperature,
+                response_format = new { type = "json_object" }
+            };
+        }
 
         string jsonPayload = JsonSerializer.Serialize(payload);
-        using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
-        try
-        {
-            using var response = await client.PostAsync(endpoint, content);
-            if (!response.IsSuccessStatusCode)
-            {
-                return $"{{\"error\": \"API BAĞLANTI HATASI: {response.StatusCode}\"}}";
-            }
+        int maxAttempts = 3;
+        int delayMs = 1000;
 
-            var responseJson = await response.Content.ReadAsStringAsync();
-            using var document = JsonDocument.Parse(responseJson);
-            
-            var root = document.RootElement;
-            if (root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0)
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
             {
-                // Ajan 2'nin ürettiği saf JSON verisi (fixedCode ve suggestedRecipe barındırır)
-                return choices[0].GetProperty("message").GetProperty("content").GetString() ?? "{\"error\": \"Yanıt boş.\"}";
+                using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+                using var response = await client.PostAsync(finalEndpoint, content);
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    if (attempt == maxAttempts)
+                        return $"{{\"error\": \"API BAĞLANTI HATASI: {response.StatusCode}\"}}";
+                        
+                    await Task.Delay(delayMs);
+                    delayMs *= 2;
+                    continue;
+                }
+
+                var responseJson = await response.Content.ReadAsStringAsync();
+                using var document = JsonDocument.Parse(responseJson);
+                
+                var root = document.RootElement;
+                if (isOllama)
+                {
+                    if (root.TryGetProperty("message", out var messageProp) && messageProp.TryGetProperty("content", out var contentProp))
+                    {
+                        return contentProp.GetString() ?? "{\"error\": \"Yanıt boş.\"}";
+                    }
+                }
+                else
+                {
+                    if (root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0)
+                    {
+                        return choices[0].GetProperty("message").GetProperty("content").GetString() ?? "{\"error\": \"Yanıt boş.\"}";
+                    }
+                }
+                
+                return "{\"error\": \"API formatı anlaşılamadı.\"}";
             }
-            
-            return "{\"error\": \"API formatı anlaşılamadı.\"}";
+            catch (UnauthorizedAccessException ex)
+            {
+                return $"{{\"error\": \"GİZLİLİK ENGELLENMESİ: {ex.Message}\"}}";
+            }
+            catch (Exception ex)
+            {
+                if (attempt == maxAttempts)
+                    return $"{{\"error\": \"BEKLENMEYEN HATA: {ex.Message}\"}}";
+                    
+                await Task.Delay(delayMs);
+                delayMs *= 2;
+            }
         }
-        catch (UnauthorizedAccessException ex)
-        {
-            return $"{{\"error\": \"GİZLİLİK ENGELLENMESİ: {ex.Message}\"}}";
-        }
-        catch (Exception ex)
-        {
-            return $"{{\"error\": \"BEKLENMEYEN HATA: {ex.Message}\"}}";
-        }
+        
+        return "{\"error\": \"API yanıt vermedi.\"}";
     }
 }

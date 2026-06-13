@@ -63,4 +63,22 @@ public class ScannerTests
         byte[] data = Encoding.UTF8.GetBytes("const db_pass = \"secret123\";");
         Assert.True(scanner.HasIssue(data));
     }
+
+    [Fact]
+    public void EntropyScanner_ShouldDetect_HighEntropySecrets()
+    {
+        var scanner = new EntropyScanner();
+        // High entropy base64 token (AWS key style)
+        byte[] data = Encoding.UTF8.GetBytes("const aws_key = \"h8F9J2kLmN4pQrStUvWxYz0123456789aBcDeFgH\";");
+        Assert.True(scanner.HasIssue(data));
+    }
+
+    [Fact]
+    public void EntropyScanner_ShouldIgnore_CleanData()
+    {
+        var scanner = new EntropyScanner();
+        // Regular clean code with normal words (low entropy)
+        byte[] data = Encoding.UTF8.GetBytes("var testValue = 42;\nvar myName = \"John Doe\";\nconsole.log(testValue, myName);");
+        Assert.False(scanner.HasIssue(data));
+    }
 }

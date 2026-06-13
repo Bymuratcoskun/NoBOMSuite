@@ -22,30 +22,34 @@ public class PrivacyGuardHandler : DelegatingHandler
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        // Eğer katı çevrimdışı mod açıksa (Varsayılan), HİÇBİR ağ isteğine izin verilmez.
-        if (_strictOfflineMode)
-        {
-            throw new UnauthorizedAccessException("[GİZLİLİK İHLALİ ENGELLENDİ] Uygulama %100 Çevrimdışı modunda çalışıyor. Telemetri veya dış ağ isteği reddedildi.");
-        }
-
-        // Eğer çevrimdışı mod kapalıysa (örn: Yapay Zeka Ajanları için), sadece "İzin Verilen Domainlere" (Whitelist) çıkış yapılabilir.
         if (request.RequestUri != null)
         {
             string host = request.RequestUri.Host;
-            bool isAllowed = false;
+            bool isLocal = host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || host.Equals("127.0.0.1");
 
-            foreach (var domain in _allowedDomains)
+            // Eğer katı çevrimdışı mod açıksa (Varsayılan), yerel olmayan HİÇBİR dış ağ isteğine izin verilmez.
+            if (_strictOfflineMode && !isLocal)
             {
-                if (host.EndsWith(domain, StringComparison.OrdinalIgnoreCase))
-                {
-                    isAllowed = true;
-                    break;
-                }
+                throw new UnauthorizedAccessException("[GİZLİLİK İHLALİ ENGELLENDİ] Uygulama %100 Çevrimdışı modunda çalışıyor. Telemetri veya dış ağ isteği reddedildi.");
             }
 
-            if (!isAllowed)
+            // Yerel olmayan isteklerin izin verilen domainler (whitelist) listesinde olduğunu doğrula
+            if (!isLocal)
             {
-                throw new UnauthorizedAccessException($"[TELEMETRİ ENGELLENDİ] '{host}' adresine giden ağ isteği gizlilik ilkesi gereği engellendi.");
+                bool isAllowed = false;
+                foreach (var domain in _allowedDomains)
+                {
+                    if (host.EndsWith(domain, StringComparison.OrdinalIgnoreCase))
+                    {
+                        isAllowed = true;
+                        break;
+                    }
+                }
+
+                if (!isAllowed)
+                {
+                    throw new UnauthorizedAccessException($"[TELEMETRİ ENGELLENDİ] '{host}' adresine giden ağ isteği gizlilik ilkesi gereği engellendi.");
+                }
             }
         }
 

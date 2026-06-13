@@ -13,6 +13,12 @@ public class BomConfig
     public int TabSize { get; set; } = 4; // Tab başına eklenecek boşluk sayısı
     public List<string> ExcludedExtensions { get; set; } = new() { ".exe", ".dll", ".png", ".jpg", ".zip" };
     public Dictionary<string, string> CustomRules { get; set; } = new();
+    public Dictionary<string, bool> EnabledModules { get; set; } = new() { { "AutoLogger", true }, { "SqliteLogger", false }, { "EntropyScanner", true } };
+    public double AiTemperature { get; set; } = 0.2;
+    public bool HasSeenWelcomeTour { get; set; } = false;
+    public string AiProvider { get; set; } = "OpenAI";
+    public string OllamaEndpoint { get; set; } = "http://localhost:11434";
+    public string OllamaModel { get; set; } = "qwen2.5-coder:7b";
 }
 
 public class BomConfigManager
