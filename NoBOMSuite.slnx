@@ -1,7 +1,4 @@
 <Solution>
-  <Folder Name="/scripts/">
-    <Project Path="scripts/InvokeScan/InvokeScan.csproj" />
-  </Folder>
   <Project Path="NoBOMSuite.Desktop.csproj" />
   <Project Path="SanitizerKit.CLI.csproj" />
   <Project Path="SanitizerKit.Core.csproj" />

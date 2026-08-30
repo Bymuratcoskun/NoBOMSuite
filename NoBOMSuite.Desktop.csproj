@@ -5,29 +5,36 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <!-- Avalonia'nın kullandığı eski DBus kütüphanesi uyarılarını gizle -->
-    <NoWarn>$(NoWarn);NU1603;NU1903</NoWarn>
-  </PropertyGroup>
+    <!-- GirCore parameterless constructor and diagnostics warnings -->
+    <NoWarn>$(NoWarn);NU1603;NU1903;GirCore1007</NoWarn>
+      <!-- Düz dizin yapısı: varsayılan glob Core'un ve testlerin dosyalarını da
+         toplar. Eskiden uzun bir <Compile Remove> KARA LİSTESİ vardı ve Core'a
+         eklenen her yeni dosya burayı SESSİZCE bozuyordu: 2026-08-30'da
+         BomConfigKoleksiyonu.cs (test dosyası) eklenince masaüstü uygulaması
+         derlenmez oldu, üstelik beş Core dosyası çift derleniyordu (CS0436).
+         Core/CLI/Native ile aynı kurala geçildi: AÇIK liste. -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+</PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.1.3" />
-    <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.1.3" />
-    <PackageReference Include="Avalonia.Desktop" Version="11.1.3" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.1.3" />
-    <PackageReference Include="LiveChartsCore.SkiaSharpView.Avalonia" Version="2.0.4" />
-    <PackageReference Include="Tmds.DBus.Protocol" Version="0.16.0" />
-    
+    <PackageReference Include="GirCore.Gtk-4.0" Version="0.8.0" />
+    <PackageReference Include="GirCore.Adw-1" Version="0.8.0" />
     <ProjectReference Include="SanitizerKit.Core.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Compile Remove="BackupManager.cs;BomConfigManager.cs;BomScanner.cs;DevGuardLogger.cs;DiagnosticAiAgent.cs;FileLockManager.cs;FixAiAgent.cs;GhostCharScanner.cs;IpcServer.cs;IpcClient.cs;IScanner.cs;LineEndingScanner.cs;LocalAiFirewall.cs;NativeApi.cs;NewlineScanner.cs;PatchGenerator.cs;PrivacyGuard.cs;SecurityAiAgent.cs;TabScanner.cs;HardcodedPasswordScanner.cs;FixRecipeAiAgent.cs;WasmBridge.cs;LogDatabaseManager.cs;SqliteLogger.cs;RegexScanner.cs;FileCacheManager.cs;EntropyScanner.cs;DiffHelper.cs" />
-    <Compile Remove="*Tests.cs" />
-  </ItemGroup>
 
   <ItemGroup>
-    <!-- Exclude helper scripts and tools from the desktop app build -->
-    <Compile Remove="scripts\**\*.cs" />
+    <!-- Yalnız masaüstü uygulamasına AİT olanlar; gerisi SanitizerKit.Core'dan gelir. -->
+    <Compile Include="Program.cs" />
+    <Compile Include="MainWindow.cs" />
+    <Compile Include="WelcomeWindow.cs" />
+    <Compile Include="ConflictResolutionWindow.cs" />
+    <Compile Include="SolutionReviewWindow.cs" />
+    <Compile Include="DashboardView.cs" />
+    <Compile Include="LogViewerView.cs" />
+    <Compile Include="DispatcherShim.cs" />
+    <Compile Include="BackgroundWatcher.cs" />
+    <Compile Include="AiOrchestrator.cs" />
   </ItemGroup>
 
 </Project>

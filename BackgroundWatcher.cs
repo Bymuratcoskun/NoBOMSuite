@@ -1,8 +1,6 @@
 using System;
 using System.IO;
 using System.Collections.Concurrent;
-using Avalonia.Threading;
-
 namespace NoBOMSuite.Desktop;
 
 public class BackgroundWatcher
@@ -53,9 +51,19 @@ public class BackgroundWatcher
         {
             return;
         }
-        
+
         _lastEventTimes[e.FullPath] = now;
-        if (_lastEventTimes.Count > 1000) _lastEventTimes.Clear(); // Bellek sızıntısı (Memory Leak) önlemi
+
+        // Tam silme yerine 5 dakikadan eski girişleri temizle; bu sayede yeni olaylar debounce kaçırılmaz
+        if (_lastEventTimes.Count > 1000)
+        {
+            var cutoff = now.AddMinutes(-5);
+            foreach (var key in _lastEventTimes.Keys)
+            {
+                if (_lastEventTimes.TryGetValue(key, out var t) && t < cutoff)
+                    _lastEventTimes.TryRemove(key, out _);
+            }
+        }
 
         Dispatcher.UIThread.Post(() => _onFileChanged(e.FullPath));
     }

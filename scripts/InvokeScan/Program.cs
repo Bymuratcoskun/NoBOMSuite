@@ -24,7 +24,8 @@ namespace InvokeScan
         // Taranmayacak sistem/derleme klasörleri
         static readonly HashSet<string> IgnoredDirs = new(StringComparer.OrdinalIgnoreCase) 
         { 
-            ".git", "node_modules", "bin", "obj", ".vs", ".idea", "dist", "build", ".nobom", "publish-cli", "publish-desktop" 
+            ".git", "node_modules", "bin", "obj", ".vs", ".idea", "dist", "build", ".nobom", "publish-cli", "publish-desktop",
+            "__pycache__", ".venv", "venv", "target", ".mypy_cache", ".pytest_cache", ".ruff_cache" 
         };
 
         static int Main(string[] args)
@@ -177,6 +178,14 @@ namespace InvokeScan
             {
                 byte[] content = File.ReadAllBytes(path);
                 var span = new ReadOnlySpan<byte>(content);
+
+                // İKİLİ DOSYA TARANMAZ. Dizin listesi hiç tamamlanmaz; içeriğe
+                // bakmak yapısal çözümdür. Ölçüm: bu denetim olmadan gerçek bir
+                // depoda bulguların %35'i .pyc dosyalarından gelen yanlış alarmdı.
+                if (IkiliTespit.Ikili(span))
+                {
+                    return;
+                }
                 scannedCount++;
 
                 var result = new ScanResult { FilePath = path };
@@ -188,6 +197,12 @@ namespace InvokeScan
                 if (new LineEndingScanner().HasIssue(span)) { hasIssue = true; issues.Add("CRLF"); fixCrlf = true; }
                 if (new GhostCharScanner().HasIssue(span)) { hasIssue = true; issues.Add("GhostChar"); fixGhost = true; }
                 if (new NewlineScanner().HasIssue(span)) { hasIssue = true; issues.Add("NoEOFNewline"); fixNewline = true; }
+                // Aşağıdaki üçü RAPOR EDİLİR, otomatik onarılmaz — onarımları
+                // ya bağlama bağlı (NBSP→boşluk) ya da imkânsız (U+FFFD:
+                // özgün karakter zaten kayıp) ya da meşru kullanımı var (bidi).
+                if (new InvisibleWhitespaceScanner().HasIssue(span)) { hasIssue = true; issues.Add("InvisibleWS"); }
+                if (new ReplacementCharScanner().HasIssue(span)) { hasIssue = true; issues.Add("BrokenDecode"); }
+                if (new BidiScanner().HasIssue(span)) { hasIssue = true; issues.Add("BidiTrojan"); }
                 if (new TabScanner().HasIssue(span)) { hasIssue = true; issues.Add("Tab"); fixTab = true; }
                 if (new HardcodedPasswordScanner().HasIssue(span)) { hasIssue = true; issues.Add("HardcodedPass"); fixPassword = true; }
 
@@ -226,7 +241,16 @@ namespace InvokeScan
                         {
                             string tempText = Encoding.UTF8.GetString(outputBytes.ToArray());
                             if (fixCrlf) tempText = tempText.Replace("\r\n", "\n");
-                            if (fixGhost) tempText = tempText.Replace("\u200B", "");
+                            if (fixGhost)
+                            {
+                                // GhostCharScanner BES karakter tespit ediyor; burada
+                                // yalnizca U+200B siliniyordu. Kalan dordu icin "ONARILDI"
+                                // deniyor ama dosya degismiyordu (2026-08-29 olcumu:
+                                // yumusak tire hic silinmiyor, ucu bir arada olan dosyada
+                                // 27 bayttan yalniz 3'u gidiyordu).
+                                foreach (var hayalet in new[] { "\u200B", "\u200C", "\u200D", "\u2060", "\u00AD" })
+                                    tempText = tempText.Replace(hayalet, "");
+                            }
                             if (fixTab) tempText = tempText.Replace("\t", "    ");
                             if (fixPassword)
                             {
@@ -242,9 +266,36 @@ namespace InvokeScan
                         }
                         
                         File.WriteAllBytes(path, outputBytes.ToArray());
-                        Console.WriteLine($"  ✨ [ONARILDI] {path}");
-                        fixedCount++;
-                        FileCacheManager.UpdateCache(path, hasIssues: false);
+
+                        // ONARIMI DOGRULA. Eskiden burasi kosulsuz "ONARILDI" yazip
+                        // onbellegi "temiz" isaretliyordu -- onarilmamis dosyalar dahil.
+                        // Bu bir sahte-basari idi ve kendini kalicilastiriyordu: onbellek
+                        // temiz diyince sonraki taramalar dosyayi atlayabiliyordu.
+                        // "Hata vermedi" onarim kaniti degildir; ESERE bakilir.
+                        var yeniden = new ReadOnlySpan<byte>(outputBytes.ToArray());
+                        var kalan = new List<string>();
+                        if (new BomScanner().HasIssue(yeniden)) kalan.Add("BOM");
+                        if (new LineEndingScanner().HasIssue(yeniden)) kalan.Add("CRLF");
+                        if (new GhostCharScanner().HasIssue(yeniden)) kalan.Add("GhostChar");
+                        if (new NewlineScanner().HasIssue(yeniden)) kalan.Add("NoEOFNewline");
+                        if (new TabScanner().HasIssue(yeniden)) kalan.Add("Tab");
+                        if (new InvisibleWhitespaceScanner().HasIssue(yeniden)) kalan.Add("InvisibleWS");
+                        if (new ReplacementCharScanner().HasIssue(yeniden)) kalan.Add("BrokenDecode");
+                        if (new BidiScanner().HasIssue(yeniden)) kalan.Add("BidiTrojan");
+                        if (new HardcodedPasswordScanner().HasIssue(yeniden)) kalan.Add("HardcodedPass");
+
+                        if (kalan.Count == 0)
+                        {
+                            Console.WriteLine($"  ✨ [ONARILDI] {path}");
+                            fixedCount++;
+                            FileCacheManager.UpdateCache(path, hasIssues: false);
+                        }
+                        else
+                        {
+                            // Kismi onarim da onarim degildir: kullanici neyin KALDIGINI gormeli.
+                            Console.WriteLine($"  ⚠️  [KISMEN] {path} -> onarilamayan: ({string.Join(", ", kalan)})");
+                            FileCacheManager.UpdateCache(path, hasIssues: true);
+                        }
                     }
                     else
                     {

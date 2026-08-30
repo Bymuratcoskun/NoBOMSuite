@@ -1,16 +1,25 @@
-using Avalonia;
 using System;
+using Gtk;
+using Adw;
+using Gio;
 
 namespace NoBOMSuite.Desktop;
 
 class Program
 {
     [STAThread]
-    public static void Main(string[] args) => BuildAvaloniaApp()
-        .StartWithClassicDesktopLifetime(args);
+    public static int Main(string[] args)
+    {
+        var app = Adw.Application.New("com.nobomsuite.desktop", Gio.ApplicationFlags.FlagsNone);
+        
+        app.OnActivate += (sender, e) =>
+        {
+            var adwApp = (Adw.Application)sender;
+            var mainWindow = new MainWindow();
+            mainWindow.SetApplication(adwApp);
+            mainWindow.Present();
+        };
 
-    public static AppBuilder BuildAvaloniaApp()
-        => AppBuilder.Configure<App>()
-            .UsePlatformDetect()
-            .LogToTrace();
+        return app.Run(args);
+    }
 }

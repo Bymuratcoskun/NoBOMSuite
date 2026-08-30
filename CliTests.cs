@@ -30,7 +30,15 @@ public class CliTests
             File.WriteAllBytes(targetPath, fullBytes);
             
             // 2. CLI'yı dotnet run ile çalıştır
-            string projectDir = "/home/bymuratcoskun/GoogleDrive/Projelerim/NoBOMSuite";
+            string projectDir = AppContext.BaseDirectory;
+            while (!string.IsNullOrEmpty(projectDir) && !File.Exists(Path.Combine(projectDir, "NoBOMSuite.slnx")))
+            {
+                projectDir = Path.GetDirectoryName(projectDir) ?? string.Empty;
+            }
+            if (string.IsNullOrEmpty(projectDir))
+            {
+                projectDir = "/home/bymuratcoskun/Projelerim/NoBOMSuite"; // fallback
+            }
             string cliProjectPath = Path.Combine(projectDir, "SanitizerKit.CLI.csproj");
             
             var processInfo = new ProcessStartInfo

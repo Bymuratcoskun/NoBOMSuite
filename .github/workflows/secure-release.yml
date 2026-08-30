@@ -28,7 +28,7 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: |
-            8.0.x
+            10.0.x
             10.0.x
 
       - name: Install Native Dependencies (Linux)
@@ -36,17 +36,17 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
 
       - name: Restore Solution Dependencies
-        run: dotnet restore NoBOMSuite.sln
+        run: dotnet restore NoBOMSuite.slnx
 
       - name: Run Unit Tests (Mock AI & Scanners)
         # Çekirdek motor, Scanner'lar ve Mocklanmış AI ajanları dahil tüm testleri çalıştırır
-        run: dotnet test NoBOMSuite.sln --no-restore --verbosity normal
+        run: dotnet test NoBOMSuite.slnx --no-restore --verbosity normal
 
       - name: Publish Native CLI (NativeAOT)
-        run: dotnet publish SanitizerKit.CLI/SanitizerKit.CLI.csproj -c Release -r ${{ matrix.rid }} --no-restore -o ./artifacts/cli
+        run: dotnet publish SanitizerKit.CLI.csproj -c Release -r ${{ matrix.rid }} --no-restore -o ./artifacts/cli
 
       - name: Publish Desktop GUI (Single File)
-        run: dotnet publish NoBOMSuite.Desktop/NoBOMSuite.Desktop.csproj -c Release -r ${{ matrix.rid }} -p:PublishSingleFile=true --no-restore -o ./artifacts/desktop
+        run: dotnet publish NoBOMSuite.Desktop.csproj -c Release -r ${{ matrix.rid }} -p:PublishSingleFile=true --no-restore -o ./artifacts/desktop
 
       - name: Sign Windows Executables (Code Signing)
         if: matrix.os == 'windows-latest'
