@@ -5,6 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <!-- SQLitePCLRaw.lib.e_sqlite3 NU1903 uyarısı: Microsoft.Data.Sqlite'ın geçişli bağımlılığıdır; bağımsız güncellenemez -->
+    <NoWarn>$(NoWarn);NU1903</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,10 +14,15 @@
     <Compile Include="BomConfigManager.cs" />
     <Compile Include="BomScanner.cs" />
     <Compile Include="DevGuardLogger.cs" />
+    <Compile Include="AiTasiyici.cs" />
     <Compile Include="DiagnosticAiAgent.cs" />
     <Compile Include="FixAiAgent.cs" />
     <Compile Include="FileLockManager.cs" />
     <Compile Include="GhostCharScanner.cs" />
+    <Compile Include="IkiliTespit.cs" />
+    <Compile Include="BidiScanner.cs" />
+    <Compile Include="ReplacementCharScanner.cs" />
+    <Compile Include="InvisibleWhitespaceScanner.cs" />
     <Compile Include="IpcServer.cs" />
     <Compile Include="IScanner.cs" />
     <Compile Include="LineEndingScanner.cs" />

@@ -10,6 +10,13 @@
     <PublishAot>true</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>
     <OptimizationPreference>Size</OptimizationPreference>
+    <!-- SQLitePCLRaw.lib.e_sqlite3 NU1903 uyarısı: Microsoft.Data.Sqlite'ın geçişli bağımlılığıdır; bağımsız güncellenemez -->
+    <NoWarn>$(NoWarn);NU1903</NoWarn>
+    <!-- Düz dizin yapısı: varsayılan glob Core'un dosyalarını da toplar.
+         Eskiden uzun bir <Compile Remove> KARA LİSTESİ vardı; Core'a eklenen her
+         yeni dosya CLI'da çift derlenip CS0436 üretiyordu (2026-08-30'da AiTasiyici.cs
+         ile canlı görüldü). Core.csproj'un kuralına geçildi: AÇIK liste. -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,8 +24,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="*Tests.cs" />
-    <Compile Remove="*.axaml.cs;Program.cs;AiOrchestrator.cs;WasmBridge.cs;BackgroundWatcher.cs;BackupManager.cs;BomConfigManager.cs;BomScanner.cs;DevGuardLogger.cs;DiagnosticAiAgent.cs;FixAiAgent.cs;FileLockManager.cs;GhostCharScanner.cs;IpcServer.cs;IpcClient.cs;IScanner.cs;LineEndingScanner.cs;LocalAiFirewall.cs;NewlineScanner.cs;PatchGenerator.cs;PrivacyGuard.cs;SecurityAiAgent.cs;TabScanner.cs;HardcodedPasswordScanner.cs;FixRecipeAiAgent.cs;NativeApi.cs;LogDatabaseManager.cs;SqliteLogger.cs;RegexScanner.cs;FileCacheManager.cs;EntropyScanner.cs;DiffHelper.cs" />
+    <!-- CLI'ye AİT olan tek şey girdi noktası ve kendi uzantıları.
+         Geri kalan her şey SanitizerKit.Core üzerinden gelir. -->
+    <Compile Include="scripts/InvokeScan/Program.cs" />
+    <Compile Include="PatchGeneratorExtensions.cs" />
   </ItemGroup>
 
 </Project>

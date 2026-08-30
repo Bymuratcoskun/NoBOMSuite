@@ -34,11 +34,37 @@ public class MockHttpMessageHandler : HttpMessageHandler
     }
 }
 
+[Collection("BomConfig")]
 public class AiAgentsTests
 {
+
+    /// <summary>Testin hangi sağlayıcıyla koştuğunu AÇIKÇA yazar ve sonunda geri alır.</summary>
+    private sealed class GeciciYapilandirma : IDisposable
+    {
+        private readonly string _yol;
+        private readonly BomConfig _onceki;
+
+        public GeciciYapilandirma(BomConfig yeni)
+        {
+            _yol = Path.Combine(Environment.CurrentDirectory, ".bomconfig");
+            _onceki = BomConfigManager.LoadConfig(_yol);
+            BomConfigManager.SaveConfig(_yol, yeni);
+        }
+
+        public void Dispose() => BomConfigManager.SaveConfig(_yol, _onceki);
+    }
+
+    private static BomConfig BulutKipi() => new()
+    {
+        AiProvider = "OpenAI",
+        StrictOfflineMode = false   // bulut testi: dış ağ yolu bilinçli olarak açık
+    };
+
     [Fact]
     public async Task DiagnosticAiAgent_Should_Return_Expected_Diagnosis_Without_Network()
     {
+        using var _ = new GeciciYapilandirma(BulutKipi());
+
         // Arrange: OpenAI formatına uygun başarılı bir sahte yanıt (Mock Response) hazırlıyoruz
         var mockResponseObj = new
         {
@@ -73,6 +99,8 @@ public class AiAgentsTests
     [Fact]
     public async Task SecurityAiAgent_Should_Return_Rejected_For_Malicious_Code()
     {
+        using var _ = new GeciciYapilandirma(BulutKipi());
+
         // Arrange: OpenAI'nin zararlı kod tespit ettiğinde vereceği formatı taklit et
         var mockResponseObj = new
         {
