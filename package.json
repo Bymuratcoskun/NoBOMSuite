@@ -1,10 +1,10 @@
 {
   "name": "nobomsuite",
   "version": "0.1.0",
-  "description": "Native Node.js wrapper for the NoBOMSuite (DevGuard) core scanning engine.",
-  "main": "index.js",
+  "description": "BOM ve görünmez karakter avcısı — tarama çekirdeği native C-API üzerinden çalışır.",
+  "main": "./extension.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node testler/eklenti-testi.js"
   },
   "keywords": [
     "bom",
@@ -15,6 +15,68 @@
   "author": "NoBOMSuite Team",
   "license": "MIT",
   "dependencies": {
-    "koffi": "^3.0.2"
+    "koffi": "^3.1.6"
+  },
+  "allowScripts": {
+    "koffi@3.1.6": true
+  },
+  "displayName": "DevGuard (NoBOMSuite)",
+  "publisher": "bymuratcoskun",
+  "categories": [
+    "Linters",
+    "Programming Languages"
+  ],
+  "engines": {
+    "vscode": "^1.85.0",
+    "node": ">=18"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "devguard.calismaAlaniniTara",
+        "title": "Çalışma alanını tara",
+        "category": "DevGuard"
+      },
+      {
+        "command": "devguard.bomuKaldir",
+        "title": "Bu dosyadaki BOM'u kaldır",
+        "category": "DevGuard"
+      }
+    ],
+    "configuration": {
+      "title": "DevGuard",
+      "properties": {
+        "devguard.etkin": {
+          "type": "boolean",
+          "default": true,
+          "description": "DevGuard tanılamalarını aç/kapa."
+        },
+        "devguard.kaydettesTara": {
+          "type": "boolean",
+          "default": true,
+          "description": "Dosya kaydedildiğinde otomatik tara."
+        },
+        "devguard.taramaDeseni": {
+          "type": "string",
+          "default": "**/*.{cs,js,ts,py,rs,json,md,txt,c,h,cpp,fs,go,java,sh}",
+          "description": "Çalışma alanı taramasında hangi dosyalar okunsun."
+        },
+        "devguard.haricDesen": {
+          "type": "string",
+          "default": "**/{node_modules,bin,obj,target,.git,__pycache__,.venv,venv}/**",
+          "description": "Taramadan hariç tutulacak dizinler."
+        }
+      }
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Bymuratcoskun/NoBOMSuite.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Bymuratcoskun/NoBOMSuite/issues"
   }
 }

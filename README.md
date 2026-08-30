@@ -2,7 +2,7 @@
 
 **Yapay Zeka Destekli, %100 Çevrimdışı, Evrensel Kod Temizleme ve Güvenlik Süiti**
 
-[![GitHub Release](https://img.shields.io/github/v/release/yourusername/NoBOMSuite?style=flat-square&color=89B4FA)](https://github.com/yourusername/NoBOMSuite/releases)
+[![GitHub Release](https://img.shields.io/github/v/release/Bymuratcoskun/NoBOMSuite?style=flat-square&color=89B4FA)](https://github.com/Bymuratcoskun/NoBOMSuite/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-A6E3A1.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 [![Platform: Win | Mac | Linux](https://img.shields.io/badge/Platform-Win%20%7C%20Mac%20%7C%20Linux-CBA6F7?style=flat-square)](#)
 

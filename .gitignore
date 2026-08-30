@@ -1,0 +1,4 @@
+
+# Eklenti paketleri (üretilebilir çıktı)
+*.vsix
+native/

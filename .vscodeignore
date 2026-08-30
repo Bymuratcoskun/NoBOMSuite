@@ -1,0 +1,22 @@
+# Eklenti paketine YALNIZ çalışması için gerekenler girer.
+#
+# 2026-08-30 dersleri (ikisi de KURULU kopya denenerek bulundu):
+#  1. koffi ÇALIŞMA ZAMANI bağımlılığıdır; `--no-dependencies` ile paketlenince
+#     eklenti hiç yüklenmedi ("Cannot find module 'koffi'").
+#  2. koffi'nin native ikilisi koffi paketinde DEĞİL, ayrı bir platform
+#     paketinde durur: @koromix/koffi-<platform>. Yalnız koffi'yi almak da
+#     yetmedi ("Cannot find the native Koffi module").
+# Bu yüzden VSIX platforma özeldir: `vsce package --target linux-x64`.
+**
+!extension.js
+!index.js
+!package.json
+!README.md
+!LICENSE
+!native/SanitizerKit.Native.so
+!node_modules/koffi/**
+!node_modules/@koromix/koffi-linux-x64/**
+node_modules/koffi/doc/**
+node_modules/koffi/src/**
+node_modules/koffi/vendor/**
+node_modules/koffi/CHANGELOG.md

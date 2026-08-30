@@ -34,4 +34,31 @@ public static class NativeApi
             return scanner.HasIssue(span) ? (byte)1 : (byte)0;
         }
     }
+
+    /// <summary>
+    /// UTF-8 BOM'unu kaldırır ve sonucu <paramref name="output"/> tamponuna yazar.
+    /// Dönüş: yazılan bayt sayısı, hata durumunda -1.
+    ///
+    /// index.js bu sembolü ilk günden beri çağırıyordu ama C-API'de KARŞILIĞI YOKTU:
+    /// koffi eksik sembolde yüklenirken patlar, yani Node sarmalayıcısı hiç
+    /// çalışamıyordu (2026-08-30'da tespit edildi).
+    ///
+    /// Çıkış tamponunun en az <paramref name="length"/> baytlık olması ÇAĞIRANIN
+    /// sorumluluğudur — index.js bunu `Buffer.alloc(contentBuffer.length)` ile sağlar.
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "remove_bom")]
+    public static int RemoveBom(IntPtr buffer, int length, IntPtr output)
+    {
+        if (buffer == IntPtr.Zero || output == IntPtr.Zero || length < 0) return -1;
+        if (length == 0) return 0;
+
+        unsafe
+        {
+            var girdi = new ReadOnlySpan<byte>(buffer.ToPointer(), length);
+            int atlanan = new BomScanner().HasIssue(girdi) ? 3 : 0;
+            var kalan = girdi[atlanan..];
+            kalan.CopyTo(new Span<byte>(output.ToPointer(), length));
+            return kalan.Length;
+        }
+    }
 }

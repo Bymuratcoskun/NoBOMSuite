@@ -8,6 +8,10 @@
     <!-- Native AOT C-API İhracı -->
     <PublishAot>true</PublishAot>
     <OutputType>Library</OutputType>
+    <!-- Düz dizin yapısı: varsayılan glob Core'un dosyalarını da toplar. Eskiden
+         uzun bir <Compile Remove> KARA LİSTESİ vardı ve Core'a eklenen her yeni
+         dosya burayı bozuyordu. Core.csproj'un kuralına geçildi: AÇIK liste. -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,8 +19,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="*Tests.cs" />
-    <Compile Remove="*.axaml.cs;Program.cs;AiOrchestrator.cs;WasmBridge.cs;BackgroundWatcher.cs;BackupManager.cs;BomConfigManager.cs;BomScanner.cs;DevGuardLogger.cs;DiagnosticAiAgent.cs;FixAiAgent.cs;FileLockManager.cs;GhostCharScanner.cs;IpcServer.cs;IpcClient.cs;IScanner.cs;LineEndingScanner.cs;LocalAiFirewall.cs;NewlineScanner.cs;PatchGenerator.cs;PrivacyGuard.cs;SecurityAiAgent.cs;TabScanner.cs;HardcodedPasswordScanner.cs;FixRecipeAiAgent.cs;LogDatabaseManager.cs;SqliteLogger.cs;RegexScanner.cs;FileCacheManager.cs;EntropyScanner.cs;DiffHelper.cs" />
+    <!-- Bu projeye ait tek şey C-API köprüsü; gerisi Core'dan gelir. -->
+    <Compile Include="NativeApi.cs" />
   </ItemGroup>
 
 </Project>
