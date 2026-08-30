@@ -61,15 +61,54 @@
         },
         "devguard.taramaDeseni": {
           "type": "string",
-          "default": "**/*.{cs,js,ts,py,rs,json,md,txt,c,h,cpp,fs,go,java,sh}",
+          "default": "**/*.{cs,js,jsx,ts,tsx,py,rs,c,h,cpp,hpp,fs,fsx,go,java,kt,rb,php,sh,json,yml,yaml,toml,xml,csproj,sln}",
           "description": "Çalışma alanı taramasında hangi dosyalar okunsun."
         },
         "devguard.haricDesen": {
           "type": "string",
-          "default": "**/{node_modules,bin,obj,target,.git,__pycache__,.venv,venv}/**",
-          "description": "Taramadan hariç tutulacak dizinler."
+          "default": "**/{node_modules,bin,obj,target,dist,out,build,.git,.nobom,__pycache__,.venv,venv,vendor,coverage,data,datasets,.vscode-test}/**",
+          "description": "Taramadan hariç tutulacak dizinler. Veri/külliyat dizinleri varsayılan olarak elenir: DevGuard kod hijyeni içindir, doğal dil metinlerinde ZWNJ/ZWJ meşrudur."
+        },
+        "devguard.enFazlaSorunluDosya": {
+          "type": "integer",
+          "default": 200,
+          "minimum": 1,
+          "description": "Çalışma alanı taraması bu kadar sorunlu dosyada durur. Kapsam fazla genişse Sorunlar panelinin boğulmasını engeller."
+        },
+        "devguard.bomSerbestUzantilar": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".sln"
+          ],
+          "description": "BOM'un meşru sayıldığı uzantılar. Visual Studio .sln dosyalarını BOM ile yazar; kaldırmak araçları bozabilir."
         }
       }
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "devguard.bomuKaldir",
+          "group": "1_modification",
+          "when": "editorTextFocus"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "devguard.bomuKaldir",
+          "group": "7_modification"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "devguard.bomuKaldir"
+        },
+        {
+          "command": "devguard.calismaAlaniniTara"
+        }
+      ]
     }
   },
   "repository": {

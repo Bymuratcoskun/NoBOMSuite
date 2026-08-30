@@ -48,6 +48,7 @@ const vscode = {
     },
     window: {
         activeTextEditor: null,
+        visibleTextEditors: [],
         showInformationMessage: (m) => { bildirimler.push(['bilgi', m]); },
         showWarningMessage:     (m) => { bildirimler.push(['uyarı', m]); },
         showErrorMessage:       (m) => { bildirimler.push(['hata', m]); },
