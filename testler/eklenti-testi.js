@@ -233,6 +233,29 @@ await test('PARİTE: extension.js listesindeki her karakteri çekirdek de görü
         assert.strictEqual(sahte.koleksiyon.get(b2.uri).length, 0, 'silinmiş dosyanın tanılaması kaldı');
     });
 
+
+    // ── REGRESYON: onarimdan sonra panel TAZELENMELİ ──────────────────────
+    // Operatör canlı gördü (2026-08-30): sağ tıkla BOM kaldırıldı, dosya
+    // gerçekten 3 bayt küçüldü, ama Sorunlar panelinde uyarı DURMAYA devam
+    // etti. Sebep: uri yolunda yeniden tarama atlanıyordu.
+    const tz = yaz('tazele.cs', Buffer.concat([Buffer.from([0xEF,0xBB,0xBF]), Buffer.from('int t = 7;\u200b\n')]));
+    const tzBelge = new sahte.Belge(tz, 'int t = 7;\u200b\n');
+    eklenti.belgeyiTara(tzBelge);
+
+    await test('onarım öncesi 2 uyarı (BOM + hayalet)', () => {
+        assert.strictEqual(sahte.koleksiyon.get(tzBelge.uri).length, 2);
+    });
+
+    sahte.vscode.window.activeTextEditor = null;
+    sahte.vscode.window.visibleTextEditors = [];
+    await sahte.kayitliKomutlar.get('devguard.bomuKaldir')(new sahte.vscode.Uri(tz));
+
+    await test('sağ tık onarımından sonra BOM uyarısı panelden DÜŞÜYOR', () => {
+        const kalan = sahte.koleksiyon.get(tzBelge.uri);
+        assert.strictEqual(kalan.length, 1, 'panel bayat kaldı: ' + JSON.stringify(kalan.map(k => k.code)));
+        assert.strictEqual(kalan[0].code, 'hayalet-karakter', 'yanlış uyarı silindi');
+    });
+
     await new Promise(r => setTimeout(r, 50));
     fs.rmSync(gecici, { recursive: true, force: true });
     console.log(`\n${gecen} test geçti${process.exitCode ? ' — BAŞARISIZ var' : ''}\n`);

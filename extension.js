@@ -152,7 +152,16 @@ async function bomuKaldir(uri) {
         return;
     }
 
-    if (belge.getText) belgeyiTara(belge);
+    // Tanılamaları TAZELE. Sağ tıkla gelindiğinde elimizde belge nesnesi değil
+    // yalnız bir uri var; eski hâlde bu yolda yeniden tarama ATLANIYOR ve panel
+    // bayat kalıyordu — dosya onarılmıştı ama uyarı ekranda duruyordu
+    // (2026-08-30, operatör canlı gördü). Belgeyi uri'den açıp yeniden tarıyoruz.
+    try {
+        belgeyiTara(await vscode.workspace.openTextDocument(belge.uri));
+    } catch {
+        if (belge.getText) belgeyiTara(belge);
+    }
+
     vscode.window.showInformationMessage(`DevGuard: BOM kaldırıldı (${once.length} → ${sonra.length} bayt).`);
 }
 

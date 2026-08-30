@@ -45,7 +45,12 @@ const vscode = {
         onDidSaveTextDocument: () => ({ dispose() {} }),
         onDidCloseTextDocument: (fn) => { kapanisIsleyici = fn; return { dispose() {} }; },
         findFiles: async () => [],
-        openTextDocument: async () => { throw new Error('kullanılmadı'); }
+        openTextDocument: async (uri) => {
+            const fs = require('fs');
+            const yol = uri.fsPath || uri;
+            // Gerçek VS Code metni BOM'suz verir; konağı buna sadık taklit et.
+            return new Belge(yol, fs.readFileSync(yol, 'utf8').replace(/^\ufeff/, ''));
+        }
     },
     window: {
         activeTextEditor: null,
