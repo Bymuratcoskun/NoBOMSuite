@@ -195,6 +195,24 @@ async function calismaAlaniniTara() {
     }
 }
 
+/**
+ * Belge kapandığında tanılamayı SİLME — dosya diskten silinmediyse bulgu hâlâ geçerli.
+ *
+ * Çalışma alanı taraması `openTextDocument` ile yüzlerce belgeyi bellekte açar;
+ * VS Code bunları görünür olmadıkları için bir süre sonra kapatır ve
+ * onDidCloseTextDocument tetiklenir. Eski hâlde tarama bulguları, kullanıcı
+ * hiçbir şey yapmadan Sorunlar panelinden TEK TEK KAYBOLUYORDU.
+ * Yalnız dosya gerçekten yoksa temizlenir.
+ */
+function belgeKapandi(belge) {
+    if (!tanilar) return;
+    try {
+        if (!require('fs').existsSync(belge.uri.fsPath)) tanilar.delete(belge.uri);
+    } catch {
+        tanilar.delete(belge.uri);
+    }
+}
+
 function activate(context) {
     tanilar = vscode.languages.createDiagnosticCollection('devguard');
     context.subscriptions.push(tanilar);
@@ -204,7 +222,7 @@ function activate(context) {
         vscode.commands.registerCommand('devguard.calismaAlaniniTara', calismaAlaniniTara),
         vscode.workspace.onDidOpenTextDocument(belgeyiTara),
         vscode.workspace.onDidSaveTextDocument((b) => { if (ayar('kaydettesTara', true)) belgeyiTara(b); }),
-        vscode.workspace.onDidCloseTextDocument((b) => tanilar.delete(b.uri))
+        vscode.workspace.onDidCloseTextDocument(belgeKapandi)
     );
 
     vscode.workspace.textDocuments.forEach(belgeyiTara);

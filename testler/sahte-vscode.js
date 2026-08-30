@@ -21,6 +21,7 @@ class Belge {
 }
 
 const kayitliKomutlar = new Map();
+let kapanisIsleyici = null;
 const bildirimler = [];
 let yapilandirma = {};
 
@@ -42,7 +43,7 @@ const vscode = {
         getConfiguration: () => ({ get: (ad, vars) => (ad in yapilandirma ? yapilandirma[ad] : vars) }),
         onDidOpenTextDocument: () => ({ dispose() {} }),
         onDidSaveTextDocument: () => ({ dispose() {} }),
-        onDidCloseTextDocument: () => ({ dispose() {} }),
+        onDidCloseTextDocument: (fn) => { kapanisIsleyici = fn; return { dispose() {} }; },
         findFiles: async () => [],
         openTextDocument: async () => { throw new Error('kullanılmadı'); }
     },
@@ -58,4 +59,5 @@ const vscode = {
 };
 
 module.exports = { vscode, Belge, kayitliKomutlar, bildirimler,
+                   kapat: (b) => kapanisIsleyici && kapanisIsleyici(b),
                    koleksiyon, ayarla: (y) => { yapilandirma = y; } };

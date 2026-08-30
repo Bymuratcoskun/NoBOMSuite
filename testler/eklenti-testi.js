@@ -208,6 +208,31 @@ await test('PARİTE: extension.js listesindeki her karakteri çekirdek de görü
         assert.strictEqual(eklenti.belgeyiTara(new sahte.Belge(y, 'int q = 9;\n')).length, 1);
     });
 
+
+    // ── REGRESYON: tarama bulguları kendiliğinden KAYBOLMAMALI ─────────────
+    // Çalışma alanı taraması yüzlerce belgeyi bellekte açar; VS Code onları
+    // sonradan kapatır. Eski hâlde kapanış tanılamayı siliyordu, yani tarama
+    // sonuçları kullanıcı hiçbir şey yapmadan panelden düşüyordu.
+    const kal = yaz('kapansa-da-kalsin.cs', Buffer.concat([Buffer.from([0xEF,0xBB,0xBF]), Buffer.from('int k = 5;\n')]));
+    const kalBelge = new sahte.Belge(kal, 'int k = 5;\n');
+    eklenti.belgeyiTara(kalBelge);
+
+    await test('dosya diskte dururken kapanış tanılamayı SİLMİYOR', () => {
+        assert.strictEqual(sahte.koleksiyon.get(kalBelge.uri).length, 1);
+        sahte.kapat(kalBelge);
+        assert.strictEqual(sahte.koleksiyon.get(kalBelge.uri).length, 1, 'tanılama kayboldu');
+    });
+
+    await test('dosya SİLİNMİŞSE kapanış tanılamayı temizliyor', () => {
+        const gecici2 = yaz('silinecek.cs', Buffer.concat([Buffer.from([0xEF,0xBB,0xBF]), Buffer.from('int s = 6;\n')]));
+        const b2 = new sahte.Belge(gecici2, 'int s = 6;\n');
+        eklenti.belgeyiTara(b2);
+        assert.strictEqual(sahte.koleksiyon.get(b2.uri).length, 1);
+        fs.unlinkSync(gecici2);
+        sahte.kapat(b2);
+        assert.strictEqual(sahte.koleksiyon.get(b2.uri).length, 0, 'silinmiş dosyanın tanılaması kaldı');
+    });
+
     await new Promise(r => setTimeout(r, 50));
     fs.rmSync(gecici, { recursive: true, force: true });
     console.log(`\n${gecen} test geçti${process.exitCode ? ' — BAŞARISIZ var' : ''}\n`);
