@@ -132,6 +132,44 @@
 - [~] **8.4 Ajan 3 — Güvenlik Gardiyanı** — aynı durum; mock testi var, canlı
   koşu yok.
 
+## 🔎 FAZ 9: Sessiz Kırılma Denetimi (2026-08-30'da eklendi)
+
+> Operatör fikri: *"Bu projede kullandığımız guard'ları da DevGuard içine eklesek?"*
+>
+> Guard'ların bir kısmı taşınmaz (termal APU'ya, OOM cgroup'a, model dışlaması
+> systemd'ye bağlı). Taşınabilen şey **desen**dir: *"iyi görünüyor ama sessizce
+> çalışmıyor."* DevGuard zaten görünmez KARAKTER avlıyordu; artık görünmez
+> KIRILMA da avlıyor.
+>
+> Analiz birimi farklıdır: diğer tarayıcılar dosya içindeki baytlara bakar,
+> bu denetim depo yapısına bakar.
+
+- [x] **9.1 `--saglamlik` kipi** — altı kontrol, hepsi GERÇEK olaydan doğdu:
+
+  | kod | ne yakalar | kaynak olay (2026-08-30) |
+  |---|---|---|
+  | `is-akisi-yanlis-dizinde` | GitHub Actions dosyası `.github/workflows/` dışında | `ci.yml` kökteydi; yazıldığı günden beri hiç koşmamıştı |
+  | `bos-cozum` | proje içermeyen `.sln`/`.slnx` | `NoBOMSuite.slnx` bomboştu; `dotnet build` "başarılı" diyordu çünkü hiçbir şey derlemiyordu |
+  | `lisans-karsiliksiz` | `package.json` lisans beyan ediyor, dosya yok | MIT yazıyordu, `LICENSE` yoktu |
+  | `girdi-noktasi-yok` | `main` var olmayan dosyayı gösteriyor | — (önleyici) |
+  | `eklenti-manifestosu-eksik` | eklenti gibi görünüp `engines`/`contributes`/`activationEvents` eksik | yol haritası "eklenti tamamlandı" diyordu; üçü de yoktu |
+  | `bayatlayan-kara-liste` | düz dizinde `Compile Remove` kara listesi | AYNI kusur dört projede; üçü aynı gün tek tek kırıldı |
+
+- [x] **9.2 Gürültü kapıları** — sağlam depo HİÇ bulgu üretmemeli; `node_modules`,
+  `bin`, `obj`, `target` ve **DevGuard'ın kendi `.nobom/` yedekleri** atlanır
+  (yedekler tek başına beş yanlış bulgu üretmişti). 18 test, her kontrolün iki
+  yüzü de sınanıyor: kusurluda bulgu ÇIKMALI, sağlamda ÇIKMAMALI.
+
+- [x] **9.3 Kanıt** — denetim, deponun bu sabahki hâline (`c760eb1`) karşı
+  koşuldu: **7 bulgu**, hepsi o gün saatler harcatan gerçek kusurlar.
+  Düzeltmelerden sonra: **0**. `sovereign-native` deposu da temiz.
+
+- [ ] **9.4 Sıradaki kontroller** (fikir havuzu)
+  - FFI sözleşmesi: `index.js`'in beyan ettiği her sembol `.so`'da var mı?
+    *(bugünkü `remove_bom` kusuru tam buydu — ilk günden beri çağrılıyordu, hiç yoktu)*
+  - `OnFailure=` / betik atıflarının sarkması (bu projede ayrı testle kapatıldı)
+  - `package.json` komutları ile kodda kayıtlı komutların paritesi
+
 ---
 
 ## 🎯 HEDEF: VS Code Marketplace'te yayın

@@ -36,6 +36,49 @@ namespace InvokeScan
                 return 0;
             }
 
+            // ── SESSİZ KIRILMA DENETİMİ ────────────────────────────────────
+            // Diğer kipler dosya İÇİNDEKİ baytlara bakar. Bu kip DEPO YAPISINA
+            // bakar: derleyici susar, testler yeşildir, ama bir şey hiç
+            // çalışmıyordur (yanlış dizindeki CI hattı, boş çözüm dosyası,
+            // karşılıksız lisans beyanı, eksik eklenti manifestosu...).
+            if (args.Contains("--saglamlik") || args.Contains("--soundness"))
+            {
+                var kokDizin = ".";
+                for (int i = 0; i < args.Length - 1; i++)
+                    if (args[i] == "--saglamlik" || args[i] == "--soundness")
+                    {
+                        if (!args[i + 1].StartsWith("--")) kokDizin = args[i + 1];
+                    }
+
+                var bulgular = SanitizerKit.Core.Soundness.SessizKirilma.Denetle(kokDizin);
+                bool jsonCikti = args.Contains("--format") &&
+                                 Array.IndexOf(args, "--format") + 1 < args.Length &&
+                                 args[Array.IndexOf(args, "--format") + 1] == "json";
+
+                if (jsonCikti)
+                {
+                    Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(bulgular,
+                        new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                }
+                else if (bulgular.Count == 0)
+                {
+                    Console.WriteLine($"✅ Sessiz kırılma denetimi: {Path.GetFullPath(kokDizin)} temiz.");
+                }
+                else
+                {
+                    Console.WriteLine($"⚠️  {bulgular.Count} sessiz kırılma bulgusu — "
+                                      + "\"iyi görünüyor ama çalışmıyor\" sınıfı:\n");
+                    foreach (var b in bulgular)
+                    {
+                        Console.WriteLine($"  [{b.Kod}] {Path.GetFileName(b.Yol)}");
+                        Console.WriteLine($"     {b.Mesaj}");
+                        Console.WriteLine($"     ↳ {b.Neden}");
+                        Console.WriteLine($"     {b.Yol}\n");
+                    }
+                }
+                return bulgular.Count == 0 ? 0 : 1;
+            }
+
             var path = ".";
             bool autoFix = args.Contains("--auto-fix");
             bool interactive = args.Contains("--interactive");
@@ -131,6 +174,10 @@ namespace InvokeScan
             Console.WriteLine("  --interactive    Sorun bulunduğunda onarmak için kullanıcıya sorar.");
             Console.WriteLine("  --format junit   JUnit XML formatında rapor üretir.");
             Console.WriteLine("  --output <path>  JUnit XML rapor dosyasının kaydedileceği yol (Varsayılan: junit-report.xml).");
+            Console.WriteLine("  --saglamlik [dizin]  SESSİZ KIRILMA denetimi: iyi görünüp çalışmayan yapılar");
+            Console.WriteLine("                       (yanlış dizindeki CI hattı, boş çözüm dosyası,");
+            Console.WriteLine("                        karşılıksız lisans, eksik eklenti manifestosu, bayat kara liste)");
+
         }
 
         static void ScanDirectory(string dir, ref int scannedCount, ref int issueCount, ref int fixedCount, bool autoFix, bool interactive)

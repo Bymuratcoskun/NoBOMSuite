@@ -15,6 +15,7 @@
     <Compile Include="BomScanner.cs" />
     <Compile Include="DevGuardLogger.cs" />
     <Compile Include="AiTasiyici.cs" />
+    <Compile Include="SessizKirilma.cs" />
     <Compile Include="DiagnosticAiAgent.cs" />
     <Compile Include="FixAiAgent.cs" />
     <Compile Include="FileLockManager.cs" />

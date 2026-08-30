@@ -6,15 +6,17 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+      <!-- Düz dizin: kara liste bayatlar (2026-08-30 denetimi). Açık listeye geçildi. -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="SanitizerKit.Core.csproj" />
   </ItemGroup>
 
+
   <ItemGroup>
-    <Compile Remove="MainWindow.axaml.cs;App.axaml.cs;BackgroundWatcher.cs;LogDatabaseManager.cs;SqliteLogger.cs;RegexScanner.cs;*.axaml.cs;*.axaml;FileCacheManager.cs;EntropyScanner.cs;DiffHelper.cs;MainWindow.cs;WelcomeWindow.cs;ConflictResolutionWindow.cs;SolutionReviewWindow.cs;DashboardView.cs;LogViewerView.cs;DispatcherShim.cs" />
-    <Compile Remove="*Tests.cs" />
+    <Compile Include="WasmBridge.cs" />
   </ItemGroup>
 
 </Project>
