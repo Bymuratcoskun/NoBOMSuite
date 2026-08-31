@@ -240,6 +240,38 @@ kuyruğuna bağlı; test edilebilir bir yüzeyi yok. Doğru çözüm onarım man
 UI'dan ayrı saf bir sınıfa çıkarmaktır — yapılmadı, çünkü masaüstü uygulaması
 yayınlanmıyor. **Düzeltildi ama kanıtlanmadı olarak sayılır.**
 
+## 🔴 Masaüstü: manuel tarama mevcut dosyaları ATLIYOR (2026-08-31, canlı)
+
+**Yayın engeli.** Masaüstü uygulaması self-contained paketlendi (80 MB tek dosya,
+.NET kurulumu gerektirmeden açılıyor) ve arayüz **çalışıyor** — eski "Avalonia
+çalışmıyor" notu artık geçersiz. Arka plan izleyicisi gerçek zamanlı çalışıyor
+ve doğru karar veriyor:
+
+```
+[UYARI] UTF-8 BOM Karakteri Tespit Edildi: bomlu.cs           ✓
+[TEMİZ] Dosya sorunsuz: temiz.cs                               ✓
+[UYARI] Görünmez Hayalet Karakter Tespit Edildi: hayalet.cs   ✓
+```
+
+**Ama manuel klasör taraması, uygulama açılmadan ÖNCE var olan dosyaları
+işlemiyor.** İkinci denemede dosyalar önceden vardı: konsol "Klasör Tarama
+Başlatıldı: /tmp/dg-paket-testi" yazdı, ardından `a.cs` ve `b.cs` **hiç
+görünmedi** — ne temiz dendi, ne uyarı verildi. Sessizce atlandılar.
+
+İlk denemenin geçmesinin sebebi: dosyaları uygulama AÇIKKEN oluşturmuştum,
+onları arka plan izleyicisi yakalamıştı. Yani manuel tarama yolu hiç sınanmamıştı.
+
+**Neden ciddi:** bir tarama aracında en kötü hata sınıfı budur — kullanıcı
+"taradım, temiz" sanır. Sessiz atlama, yanlış alarmdan beterdir.
+
+**Eleme:** uzantı filtresi DEĞİL (`.bomconfig` yalnız `.exe .dll .png .jpg .zip`
+dışlıyor, `.cs` listede yok). Kök `MainWindow` içindeki tarama akışında.
+
+**Kapı: DÜZELT** — düzeltmeyle birlikte, mevcut dosyaların tarandığını iddia eden
+bir test gelmeli. Bugün eklentide bulunan üç kusur da tam bu şekilde kapatıldı.
+Düzelene kadar masaüstü **yayınlanmaz**; VS Code eklentisi Open VSX'te yayında ve
+çalıştığı kanıtlı, o yeterli.
+
 ## Sıradaki en değerli işler (ölçüme dayalı)
 
 1. **Ajan 2 ve 3'ü canlı koştur** — altyapı hazır, yerel 14B bağlı; tek
