@@ -7,6 +7,14 @@ obj/
 # ── Bağımlılıklar — package-lock.json izlenir, node_modules izlenmez ──
 node_modules/
 
+# ── Yayın çıktıları (dotnet publish) — geçmişte 90+ MB yer kaplamıştı ──
+publish-desktop/
+publish-cli/
+*.dbg
+
+# ── DevGuard'ın KENDİ yedek dizini — aracın çalışma verisi, kaynak değil ──
+.nobom/
+
 # ── Eklenti paketi (üretilebilir çıktı) ──
 *.vsix
 native/
