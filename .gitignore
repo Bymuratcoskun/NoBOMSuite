@@ -2,3 +2,7 @@
 # Eklenti paketleri (üretilebilir çıktı)
 *.vsix
 native/
+
+# Uretilen calisma verisi — depoda durmaz (2026-08-31)
+devguard_auto.log
+devguard_logs.db
