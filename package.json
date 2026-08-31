@@ -117,5 +117,11 @@
   },
   "bugs": {
     "url": "https://github.com/Bymuratcoskun/NoBOMSuite/issues"
-  }
+  },
+  "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#1a202c",
+    "theme": "dark"
+  },
+  "homepage": "https://github.com/Bymuratcoskun/NoBOMSuite#readme"
 }

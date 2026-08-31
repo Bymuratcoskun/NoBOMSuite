@@ -1,39 +1,83 @@
-# 🛡️ NoBOMSuite (DevGuard)
+<p align="center">
+  <img src="icon.png" width="96" alt="DevGuard" />
+</p>
 
-**Yapay Zeka Destekli, %100 Çevrimdışı, Evrensel Kod Temizleme ve Güvenlik Süiti**
+<h1 align="center">DevGuard — NoBOMSuite</h1>
 
-[![GitHub Release](https://img.shields.io/github/v/release/Bymuratcoskun/NoBOMSuite?style=flat-square&color=89B4FA)](https://github.com/Bymuratcoskun/NoBOMSuite/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-A6E3A1.svg?style=flat-square)](https://opensource.org/licenses/MIT)
-[![Platform: Win | Mac | Linux](https://img.shields.io/badge/Platform-Win%20%7C%20Mac%20%7C%20Linux-CBA6F7?style=flat-square)](#)
-
-NoBOMSuite (DevGuard); görünmez hayalet karakterleri (Ghost Chars), hatalı BOM (Byte Order Mark) imazalarını, yanlış satır sonlarını ve koda gömülü parolaları (Hardcoded Passwords) tespit edip onaran **yeni nesil bir linter ve sanitizer** aracıdır.
-
-Sadece bir araç değil, **Çoklu AI Ajan Mimarisi** (Teşhis, Çözüm ve Güvenlik Gardiyanı) sayesinde kodunuzu anlayan, sizin için yama üreten ve bu yamaları sisteminize sızmadan önce denetleyen eksiksiz bir güvenlik asistanıdır.
-
-## ✨ Öne Çıkan Özellikler
-
-- 🚀 **Işık Hızında Performans:** .NET Native AOT ile derlenmiştir. Herhangi bir runtime (çalışma zamanı) gerektirmez, doğrudan makine kodu hızıyla çalışır.
-- 🔒 **Sıfır Telemetri & PrivacyGuard:** Analizler tamamen yerelde yapılır. "Strict Offline Mode" sayesinde izniniz olmadan dış dünyaya tek bir bayt bile veri sızmaz.
-- 🤖 **Üçlü Yapay Zeka (Tri-Agent AI):** 
-  - **Ajan 1:** Hataları açıklar.
-  - **Ajan 2:** Çözüm ve Regex reçeteleri üretir.
-  - **Ajan 3:** Üretilen çözümleri uygulamanızdan önce denetleyen güvenlik gardiyanıdır.
-- 🌍 **Çoklu Platform ve Dil Desteği:** Masaüstü Uygulaması (Avalonia UI), CLI Aracı, Tarayıcı (WebAssembly), Node.js ve Python Wrapper destekleriyle her ekosisteme uyum sağlar.
-- 🍲 **Topluluk Odaklı Reçete Havuzu:** Kendi onarım kurallarınızı (Patch Generator) yazın ve bağımsız bir betik olarak her yerde kullanın.
+<p align="center">
+  <b>Finds the characters your eyes cannot see.</b><br/>
+  Byte-order marks and invisible Unicode, flagged where they actually are.
+</p>
 
 ---
 
-## 🚀 Hızlı Başlangıç
+A file looks fine. The diff looks fine. The build fails, or a string comparison
+silently returns `false`. The cause is a character with no width: a BOM, a
+zero-width space, a soft hyphen.
 
-**CLI Kullanımı:**
-```bash
-# Mevcut klasörü hızlıca tara ve hataları otomatik onar
-sanitizerkit-cli scan ./my-project --auto-fix
-```
+DevGuard marks them in the editor, at the exact position, as you open and save.
 
-**Masaüstü (GUI) Kullanımı:**
-İndirdiğiniz çalıştırılabilir dosyayı açın ve kodlarınızı sürükleyip bırakın. AI asistanınız saniyeler içinde çalışmaya başlayacaktır!
+## What it does
 
----
+| | |
+|---|---|
+| **BOM detection** | UTF-8 byte-order marks. `.sln` files are exempt — Visual Studio writes them deliberately, so flagging one is a false alarm. |
+| **Invisible characters** | Zero-Width Space, Zero-Width Non-Joiner, Zero-Width Joiner, Word Joiner, Soft Hyphen — each reported with its name and cursor position. |
+| **Scan on open and save** | Diagnostics appear in the Problems panel like any linter's. Save-scanning can be turned off. |
+| **Workspace scan** | One command sweeps the whole workspace. |
+| **One-click BOM removal** | Right-click a file, remove the BOM, byte counts reported before and after. |
 
-📚 *Daha fazla bilgi, özel reçeteler ve geliştirici rehberi için [RECIPE_HUB.md](RECIPE_HUB.md) ve [RoadMap.md](RoadMap.md) dosyalarına göz atın.*
+The scanning core is native C, reached through a C ABI — the same engine the
+command-line tool uses, not a re-implementation.
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `DevGuard: Çalışma alanını tara` | Scan the entire workspace |
+| `DevGuard: Bu dosyadaki BOM'u kaldır` | Strip the BOM from one file |
+
+> **Note on language:** the command titles and messages are currently Turkish.
+> Everything else — diagnostics, settings, behaviour — is language-neutral.
+> English localisation is planned.
+
+## Settings
+
+| Setting | Default | |
+|---|---|---|
+| `devguard.etkin` | `true` | Enable diagnostics |
+| `devguard.kaydettesTara` | `true` | Scan on save |
+| `devguard.taramaDeseni` | source files | Glob for workspace scan |
+| `devguard.haricDesen` | build/vendor dirs | Glob to exclude |
+
+### Why the default scope is narrow
+
+An early wide-scope run in a data-heavy repository scanned 22,665 files and
+returned **364,000+ matches** across 384 text corpora (arXiv papers, Gutenberg
+books). Every match was *correct* and every one was *noise*: ZWNJ and ZWJ are
+legitimate orthographic characters in Persian, Arabic and the Indic scripts.
+
+DevGuard is a **code** hygiene tool. It ships pointed at source files, and it
+excludes `data/` and `datasets/` by default. Widen it deliberately, not by
+accident.
+
+## Platform
+
+This release targets **Linux x64**. The scanning core is a native library, so
+Windows and macOS need their own builds; they are not published yet rather than
+published untested.
+
+## Requirements
+
+None. The native core is bundled.
+
+## Known limitations
+
+- Command titles are Turkish (see above)
+- Linux x64 only
+- The desktop application in this repository (Avalonia) is **not** part of the
+  extension and is not finished — see [`README.desktop.md`](README.desktop.md)
+
+## License
+
+MIT — [source on GitHub](https://github.com/Bymuratcoskun/NoBOMSuite)

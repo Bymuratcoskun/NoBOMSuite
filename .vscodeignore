@@ -12,11 +12,20 @@
 !index.js
 !package.json
 !README.md
+!CHANGELOG.md
 !LICENSE
+!icon.png
 !native/SanitizerKit.Native.so
 !node_modules/koffi/**
 !node_modules/@koromix/koffi-linux-x64/**
-node_modules/koffi/doc/**
-node_modules/koffi/src/**
-node_modules/koffi/vendor/**
-node_modules/koffi/CHANGELOG.md
+#  3. Aşağıdaki üç exclude KALDIRILDI (2026-08-31) — dosyada duruyorlardı ama
+#     ÇALIŞMIYORLARDI: vsce'de bir negation'dan (`!node_modules/koffi/**`)
+#     sonra yazılan exclude onu geri almıyor; pakette 1,16 MB fazlalık kalıyordu.
+#     Doğrusunu kurmak için include'lar daraltıldı (yalnız gereken giriş
+#     dosyaları): paket 1,59 → 1,24 MB indi, AMA açılıp çalıştırılınca
+#     `Cannot find module` verdi — koffi kendi iç zincirini require ediyor.
+#     İki tur kovalandı, her turda yeni bir dosya çıktı.
+#     KARAR: 350 KB için kırılganlık satın alınmaz. Geniş include KALIYOR —
+#     paketlenmiş kopya açılıp çağrılarak çalıştığı kanıtlandı.
+#     Yazılı ama işlemeyen bir kural tutmaktansa, kuralı kaldırıp gerçeği
+#     yazmak yeğdir.

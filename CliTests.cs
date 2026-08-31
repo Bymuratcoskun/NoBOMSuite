@@ -29,22 +29,34 @@ public class CliTests
             
             File.WriteAllBytes(targetPath, fullBytes);
             
-            // 2. CLI'yı dotnet run ile çalıştır
+            // 2. CLI'yı ÖNCEDEN DERLENMİŞ ikiliyle çalıştır.
+            //
+            // Eskiden burada "dotnet run --project ..." vardı: test kendi içinde
+            // BİR DERLEME başlatıyordu. Eşzamanlı bir `dotnet build` varsa aynı
+            // obj/ ve bin/ dizinleri üzerinde yarışırlar ve test SEBEPSİZ düşer.
+            // 2026-08-31'de canlı görüldü: build+test peş peşe koşunca 2 test
+            // düştü, tek başına 6 turda hiç düşmedi. CI'da paralel iş varsa aynı
+            // kırılganlık oradadır.
+            //
+            // Ayrıca sabit bir "/home/<kullanıcı>/..." yedek yolu vardı — başka
+            // hiçbir makinede anlamı yok. Kaldırıldı: kök bulunamazsa test
+            // SESSİZCE yanlış yere bakmak yerine AÇIKÇA düşer.
             string projectDir = AppContext.BaseDirectory;
             while (!string.IsNullOrEmpty(projectDir) && !File.Exists(Path.Combine(projectDir, "NoBOMSuite.slnx")))
             {
                 projectDir = Path.GetDirectoryName(projectDir) ?? string.Empty;
             }
-            if (string.IsNullOrEmpty(projectDir))
-            {
-                projectDir = "/home/bymuratcoskun/Projelerim/NoBOMSuite"; // fallback
-            }
-            string cliProjectPath = Path.Combine(projectDir, "SanitizerKit.CLI.csproj");
-            
+            Assert.False(string.IsNullOrEmpty(projectDir),
+                "Depo kökü (NoBOMSuite.slnx) bulunamadı — testin öznesi yok.");
+
+            string cliBinary = Path.Combine(AppContext.BaseDirectory, "SanitizerKit.CLI.dll");
+            Assert.True(File.Exists(cliBinary),
+                $"CLI ikilisi yok: {cliBinary}. TestFixtures, CLI'ya proje referansı taşımalı.");
+
             var processInfo = new ProcessStartInfo
             {
                 FileName = "dotnet",
-                Arguments = $"run --project \"{cliProjectPath}\" -- \"{targetPath}\" --format junit --output \"{reportPath}\"",
+                Arguments = $"\"{cliBinary}\" \"{targetPath}\" --format junit --output \"{reportPath}\"",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,

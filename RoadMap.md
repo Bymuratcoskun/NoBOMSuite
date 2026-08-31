@@ -183,14 +183,43 @@ Eklenti zaten paketleniyor ve kuruluyor. Yayın için eksikler:
 - [x] `repository` alanı — eklendi
 - [ ] **Yayıncı hesabı** — Azure DevOps organizasyonu + Personal Access Token,
       sonra `vsce publish`
-- [ ] **İkon** (128×128 PNG) ve `galleryBanner`
-- [ ] **README'yi eklenti vitrini olarak yaz** — şu an masaüstü uygulamasını
-      anlatıyor, eklentiyi değil; Marketplace sayfası bu dosyayı gösterir
-- [ ] **CHANGELOG.md**
-- [ ] Sürüm `0.1.0` → yayına uygun bir numara
-- [ ] Çoklu platform: şu an VSIX yalnız `linux-x64` (koffi'nin native ikilisi
-      ve bizim `.so` platforma bağlı). Windows/macOS için ayrı hedefler gerekir
-      — ya da yayın ilk turda yalnız Linux olur.
+- [x] **İkon** (128×128 PNG) ve `galleryBanner` — `icon.png`, kalkan + kesikli
+      kutu + yakalanan karakter; manifest'e bağlandı ve VSIX'te doğrulandı
+- [x] **README eklenti vitrini oldu** (2026-08-31) — İngilizce, yalnız
+      doğrulanmış özellikler. Eski masaüstü metni `README.desktop.md`'ye taşındı.
+      Türkçe komut başlıkları ve linux-x64 sınırı **açıkça** yazıldı
+- [x] **CHANGELOG.md** — 0.1.0 girdisi, tasarım kararları ve bilinen sınırlar
+- [x] Sürüm **0.1.0 kalıyor** (operatör kararı 2026-08-31): 'kod var,
+      çalıştırılmadı' başlığı altında beş madde duruyor; 1.0 demek onları
+      doğrulanmış saymak olurdu
+- [x] **Platform kararı: ilk yayın yalnız `linux-x64`** (operatör 2026-08-31).
+      Windows/macOS native ikilileri bu makinede çapraz derlenip test edilemez;
+      doğrulanmamış ikili yayınlamaktansa yayınlamamak yeğdir.
+
+## 2026-08-31 — yayın hazırlığı
+
+Kalan tek engel **yayıncı hesabı** (Azure DevOps + PAT) — operatörde.
+
+Bu turda kapatılanlar ve **ölçülen iki gerçek kusur**:
+
+- 🔴 **`CliTests` kendi içinde `dotnet run` çağırıyordu** — test bir derleme
+  başlatıyordu. Eşzamanlı bir `dotnet build` varsa aynı `obj/`+`bin/` üzerinde
+  yarışıp **sebepsiz düşüyordu**: build+test peş peşe koşunca 2 test düştü,
+  tek başına 6 turda hiç düşmedi. Artık önceden derlenmiş `SanitizerKit.CLI.dll`
+  çağrılıyor (TestFixtures'a proje referansı eklendi). Eşzamanlı 3 turda temiz,
+  ve test süresi **5 sn → 373 ms**. İkili yoksa test *açıkça* düşüyor (kanıtlandı),
+  sessizce geçmiyor. Ayrıca sabit `/home/<kullanıcı>/...` yedek yolu kaldırıldı.
+- 🔴 **`.vscodeignore`'daki üç kural yazılıydı ama çalışmıyordu** — vsce'de bir
+  negation'dan sonra yazılan exclude onu geri almıyor; 1,16 MB fazlalık
+  paketleniyordu. Daraltılmış include denendi (1,59 → 1,24 MB) ama paket
+  **açılıp çağrılınca `Cannot find module` verdi**. İki tur kovalandı.
+  Karar: 350 KB için kırılganlık satın alınmaz; geniş include kaldı, işlemeyen
+  kural **silinip yerine gerekçe yazıldı**.
+
+**Doğrulama yöntemi:** VSIX açıldı, `require('./index.js')` ile çekirdek
+yüklendi, dört tarama iddiası (BOM var/yok, ZWSP var/yok) paketlenmiş kopya
+üzerinde koşturuldu. *Paketleme "DONE" demesi çalıştığı anlamına gelmiyor —
+bu turda tam olarak bu yaşandı.*
 
 ## Sıradaki en değerli işler (ölçüme dayalı)
 

@@ -12,6 +12,10 @@
 
   <ItemGroup>
     <ProjectReference Include="SanitizerKit.Core.csproj" />
+    <!-- CliTests önceden derlenmiş SanitizerKit.CLI.dll'i çağırır (test içinde
+         "dotnet run" YOK: eşzamanlı derlemeyle yarışıyordu). Bu referans
+         ikilinin test çıktı dizininde bulunmasını garanti eder. -->
+    <ProjectReference Include="SanitizerKit.CLI.csproj" />
   </ItemGroup>
 
   <ItemGroup>
