@@ -1,6 +1,7 @@
 'use strict';
 
 const vscode = require('vscode');
+const path = require('path');
 const cekirdek = require('./index.js');
 
 /**
@@ -52,10 +53,47 @@ function belgeyiTara(belge) {
 
     // 1) BOM — kararı ÇEKİRDEK verir (aynı .so, CLI ile birebir aynı mantık).
     //    VS Code metni BOM'suz verir; bu yüzden dosyanın kendisini okuyoruz.
+    // Disk okuması SENKRON: 60 MB'lık bir dosyada okuma+tarama 224 ms ölçüldü
+    // (2026-08-31) ve bu süre boyunca eklenti ana thread'i bloke olur. Tavanın
+    // üstündeki dosya taranmaz — ama SESSİZCE atlanmaz, kullanıcıya söylenir.
+    const tavanMB = ayar('enFazlaDosyaMB', 8);
     let diskTamponu = null;
-    try { diskTamponu = require('fs').readFileSync(belge.uri.fsPath); } catch { /* kaydedilmemiş dosya */ }
+    try {
+        const fsm = require('fs');
+        const boyut = fsm.statSync(belge.uri.fsPath).size;
+        if (boyut > tavanMB * 1024 * 1024) {
+            const t = new vscode.Diagnostic(
+                new vscode.Range(0, 0, 0, 1),
+                `DevGuard: dosya ${(boyut / 1048576).toFixed(1)} MB — ${tavanMB} MB tavanının üstünde, BOM taraması ATLANDI. ` +
+                `Tavanı 'devguard.enFazlaDosyaMB' ile değiştirebilirsiniz.`,
+                vscode.DiagnosticSeverity.Information
+            );
+            t.source = 'DevGuard';
+            t.code = 'tavan-asildi';
+            bulgular.push(t);
+        } else {
+            diskTamponu = fsm.readFileSync(belge.uri.fsPath);
+        }
+    } catch (e) {
+        // Eskiden burası tamamen sessizdi ve yorumu "kaydedilmemiş dosya" diyordu.
+        // Ama izin hatası, silinmiş dosya ve ağ sürücüsü kopması da BURAYA düşer;
+        // o hâlde BOM taraması yapılmadığı hâlde kullanıcı temiz sanır.
+        if (e && e.code !== 'ENOENT') {
+            const t = new vscode.Diagnostic(
+                new vscode.Range(0, 0, 0, 1),
+                `DevGuard: dosya diskten okunamadı (${e.code || 'bilinmeyen'}), BOM taraması yapılamadı.`,
+                vscode.DiagnosticSeverity.Information
+            );
+            t.source = 'DevGuard';
+            t.code = 'okunamadi';
+            bulgular.push(t);
+        }
+    }
 
-    const uzanti = belge.uri.fsPath.slice(belge.uri.fsPath.lastIndexOf('.')).toLowerCase();
+    // path.extname ŞART: `slice(lastIndexOf('.'))` uzantısız dosyalarda saçmalıyor —
+    // "~/.config/proje/Makefile" için ".config/proje/makefile" döndürüyordu,
+    // "Makefile" için "e". Muafiyet listesi böyle bir değerle karşılaştırılıyordu.
+    const uzanti = path.extname(belge.uri.fsPath).toLowerCase();
     const bomSerbest = ayar('bomSerbestUzantilar', BOM_SERBEST).includes(uzanti);
 
     if (diskTamponu && !bomSerbest && cekirdek.scanBom(diskTamponu)) {
@@ -122,6 +160,28 @@ async function bomuKaldir(uri) {
     }
 
     const yol = belge.uri.fsPath;
+
+    // KAYDEDİLMEMİŞ DEĞİŞİKLİK KAPISI (2026-08-31'de koşturularak bulundu).
+    //
+    // Bu komut dosyayı DİSKTEN okur ve DİSKE yazar. Editörde kaydedilmemiş bir
+    // değişiklik varsa iki hâl ayrışır: diski onarırız, editör tamponu eski
+    // BOM'lu hâli tutmaya devam eder. Kullanıcı Ctrl+S'e bastığı anda tampon
+    // diski ezer ve BOM GERİ GELİR — ama kullanıcı "BOM kaldırıldı" bildirimini
+    // çoktan görmüştür. Yani işlem sessizce geri alınır ve başarılı görünür.
+    //
+    // Kanıt (sahte konakta): disk "eski icerik", editör "kaydedilmemiş yeni
+    // içerik", bildirim "BOM kaldırıldı (15 → 12 bayt)".
+    //
+    // Onun yerine: DOKUNMA, kullanıcıya söyle. Kaydetmeyi biz yapmıyoruz —
+    // kullanıcının kaydedilmemiş çalışmasını onun adına diske yazmak, istemediği
+    // bir kararı onun yerine vermektir.
+    if (belge.isDirty) {
+        vscode.window.showWarningMessage(
+            'DevGuard: bu dosyada kaydedilmemiş değişiklikler var. Önce kaydedin, ' +
+            'sonra BOM\'u kaldırın — aksi halde kaydettiğinizde BOM geri gelir.');
+        return;
+    }
+
     const fs = require('fs');
     const once = fs.readFileSync(yol);
 
@@ -130,7 +190,7 @@ async function bomuKaldir(uri) {
         return;
     }
 
-    const uz = yol.slice(yol.lastIndexOf('.')).toLowerCase();
+    const uz = path.extname(yol).toLowerCase();   // bkz. belgeyiTara'daki not
     if (ayar('bomSerbestUzantilar', BOM_SERBEST).includes(uz)) {
         vscode.window.showWarningMessage(
             `DevGuard: ${uz} dosyalarında BOM beklenen bir durumdur (Visual Studio böyle yazar). ` +

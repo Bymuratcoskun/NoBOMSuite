@@ -256,6 +256,62 @@ await test('PARİTE: extension.js listesindeki her karakteri çekirdek de görü
         assert.strictEqual(kalan[0].code, 'hayalet-karakter', 'yanlış uyarı silindi');
     });
 
+    // ───────────────────────────────────────────────────────────────────────
+    // 2026-08-31 · yayın öncesi hata analizinde koşturularak bulunan üç kusur.
+    // Her testin karşılığı GERÇEK bir arıza senaryosudur, varsayım değil.
+    // ───────────────────────────────────────────────────────────────────────
+
+    // 1) Kaydedilmemiş değişiklik varken diske yazmak, işlemi sessizce geri
+    //    aldırır: kullanıcı Ctrl+S yapınca tampon diski ezer, BOM geri gelir —
+    //    ama "BOM kaldırıldı" bildirimi çoktan gösterilmiştir.
+    {
+        const kirliYol = yaz('kirli.cs', Buffer.concat([Buffer.from([0xEF, 0xBB, 0xBF]), Buffer.from('eski\n')]));
+        const kirliBelge = new sahte.Belge(kirliYol, 'kaydedilmemis yeni icerik\n', true);
+        sahte.vscode.window.activeTextEditor = { document: kirliBelge };
+        sahte.bildirimler.length = 0;
+        await sahte.kayitliKomutlar.get('devguard.bomuKaldir')();
+
+        await test('kaydedilmemiş değişiklik varken diske DOKUNMUYOR', () => {
+            const diskte = fs.readFileSync(kirliYol);
+            assert.strictEqual(diskte[0], 0xEF, 'dosya değiştirildi — kullanıcının kaydı bunu ezecekti');
+        });
+        await test('kaydedilmemiş değişikliği kullanıcıya SÖYLÜYOR', () => {
+            const uyari = sahte.bildirimler.find(([tip]) => tip === 'uyarı');
+            assert.ok(uyari, 'hiç uyarı yok: ' + JSON.stringify(sahte.bildirimler));
+            assert.match(uyari[1], /kaydedilmemiş/i);
+        });
+        await test('kaydedilmemişken "başarılı" DEMİYOR', () => {
+            const yalan = sahte.bildirimler.find(([tip, m]) => tip === 'bilgi' && /kaldırıldı/i.test(m));
+            assert.ok(!yalan, 'sahte başarı bildirimi: ' + JSON.stringify(yalan));
+        });
+        sahte.vscode.window.activeTextEditor = null;
+    }
+
+    // 2) Uzantı hesabı — DÜZELTİLDİ ama TEST YOK, bilerek.
+    //    `slice(lastIndexOf('.'))` uzantısız dosyalarda yanlış değer üretiyordu
+    //    ("~/.config/proje/Makefile" → ".config/proje/makefile"). path.extname'e
+    //    geçildi. Buraya bir test yazıldı ve MUTASYONDA HAYATTA KALDI: eski kod
+    //    da testi geçiyordu. Sebep, düzeltmenin gereksizliği değil, kusurun
+    //    ZARARSIZ olması — yanlış değer her zaman "/" içerdiği için muafiyet
+    //    listesiyle asla eşleşmiyor, yani gözlemlenebilir arıza üretmiyor.
+    //    Değersiz testi tutmak yerine gerçeği buraya yazmak yeğdir:
+    //    bu düzeltme savunma amaçlıdır, bir arızayı kapatmıyor.
+
+    // 3) Büyük dosya: senkron okuma ana thread'i bloke eder (60 MB → 224 ms
+    //    ölçüldü). Tavan üstü dosya taranmaz ama SESSİZ atlanmaz.
+    {
+        const buyukYol = yaz('buyuk.json', Buffer.alloc(2 * 1024 * 1024, 0x61));
+        sahte.ayarla({ enFazlaDosyaMB: 1 });
+        const belge = new sahte.Belge(buyukYol, 'a');
+        const bulgular = eklenti.belgeyiTara(belge) || sahte.koleksiyon.get(belge.uri);
+        sahte.ayarla({});
+
+        await test('tavan üstü dosya SESSİZCE atlanmıyor, bildiriliyor', () => {
+            assert.ok(bulgular.some((b) => b.code === 'tavan-asildi'),
+                'atlama sessiz geçti: ' + JSON.stringify(bulgular.map((b) => b.code)));
+        });
+    }
+
     await new Promise(r => setTimeout(r, 50));
     fs.rmSync(gecici, { recursive: true, force: true });
     console.log(`\n${gecen} test geçti${process.exitCode ? ' — BAŞARISIZ var' : ''}\n`);

@@ -31,6 +31,26 @@ Bu proje [Semantic Versioning](https://semver.org/lang/tr/) kullanır.
 - Eklentideki hayalet karakter listesi çekirdektekiyle **testle kilitlidir**
   (`npm run test:parite`): iki taraf aynı şeyi görmezse test düşer.
 
+### Yayın öncesi hata analizinde bulunanlar (2026-08-31)
+
+Üç kusur koşturularak arandı, ikisi gerçek çıktı:
+
+- 🔴 **Kaydedilmemiş değişiklik varken diske yazılıyordu.** Komut dosyayı
+  diskten okuyup diske yazıyor; editörde kaydedilmemiş değişiklik varsa iki hâl
+  ayrışıyor ve kullanıcı Ctrl+S yaptığı anda tampon diski eziyor — **BOM geri
+  geliyor**, ama "BOM kaldırıldı" bildirimi çoktan gösterilmiş oluyor. İşlem
+  sessizce geri alınıyor ve başarılı görünüyordu. Artık dosyaya **dokunulmuyor**,
+  kullanıcıya söyleniyor. (Kaydetmeyi onun adına biz yapmıyoruz.)
+- 🟡 **Büyük dosyada editör bloke oluyordu.** BOM taraması senkron; 60 MB'lık
+  dosyada okuma+tarama **224 ms** ölçüldü. Artık `devguard.enFazlaDosyaMB`
+  (varsayılan 8) tavanı var — tavan üstü dosya taranmıyor ama **sessizce
+  atlanmıyor**, Sorunlar panelinde bildiriliyor. Okuma hatası da (izin, ağ
+  sürücüsü) aynı şekilde artık sessiz yutulmuyor.
+- ⚪ **Uzantı hesabı** `slice(lastIndexOf('.'))` yanlıştı ("Makefile" → `"e"`).
+  `path.extname`'e geçildi — ama **gözlemlenebilir arıza üretmediği mutasyonla
+  kanıtlandı**: yanlış değer her zaman `/` içerdiği için muafiyet listesiyle
+  asla eşleşmiyordu. Savunma amaçlı düzeltme; kusur diye sayılmadı.
+
 ### Bilinen sınırlar
 
 - Komut başlıkları Türkçe; İngilizce yerelleştirme planlanıyor

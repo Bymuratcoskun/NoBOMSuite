@@ -84,6 +84,11 @@
             ".sln"
           ],
           "description": "BOM'un meşru sayıldığı uzantılar. Visual Studio .sln dosyalarını BOM ile yazar; kaldırmak araçları bozabilir."
+        },
+        "devguard.enFazlaDosyaMB": {
+          "type": "number",
+          "default": 8,
+          "description": "Bu boyutun üstündeki dosyalarda BOM taraması atlanır (senkron okuma editörü bloke eder). Atlanan dosya sessiz geçmez, Sorunlar panelinde bildirilir."
         }
       }
     },

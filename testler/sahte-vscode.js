@@ -11,7 +11,11 @@ class Diagnostic { constructor(range, message, severity) { this.range = range; t
 class Uri { constructor(fsPath) { this.fsPath = fsPath; this.scheme = 'file'; this.toString = () => 'file://' + fsPath; } }
 
 class Belge {
-    constructor(fsPath, metin) { this.uri = new Uri(fsPath); this._metin = metin; }
+    // isDirty: gerçek VS Code'da kullanıcının KAYDEDİLMEMİŞ değişikliği varsa true.
+    // Konak bunu sunuyor; eklentinin ona bakması gerekir (2026-08-31 bulgusu).
+    constructor(fsPath, metin, isDirty = false) {
+        this.uri = new Uri(fsPath); this._metin = metin; this.isDirty = isDirty;
+    }
     getText() { return this._metin; }
     positionAt(offset) {
         const once = this._metin.slice(0, offset);
