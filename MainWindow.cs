@@ -929,7 +929,14 @@ public class MainWindow : Adw.ApplicationWindow
 
                 if (config.AutoFix && allowAutoFix)
                 {
-                    _uiActionQueue.Enqueue(() => _dashboardView?.UpdateDashboard(filePath, "Onarıldı", "#89B4FA"));
+                    // "Onarıldı" rozeti BURADA verilmez — dosya henüz yazılmadı.
+                    // 2026-08-31 denetimi: rozet yazma işleminden ÖNCE kuyruğa
+                    // giriyordu. Yedekleme, kodlama, regex ya da WriteAllBytes
+                    // (izin / disk dolu / salt okunur) hata verirse akış catch'e
+                    // düşer, günlüğe "HATA" yazılır ama panelde MAVİ "Onarıldı"
+                    // rozeti asılı kalırdı. Kullanıcı onarılmamış dosyayı
+                    // onarılmış sanardı — bu projenin bir daha yapmamaya söz
+                    // verdiği hatanın ta kendisi.
                     LogToConsole($"🛠️ [AUTO-FIX] Otomatik onarım başlatılıyor: {Path.GetFileName(filePath)}", filePath);
                     
                     if (config.BackupEnabled)
@@ -976,6 +983,10 @@ public class MainWindow : Adw.ApplicationWindow
                     }
                     
                     File.WriteAllBytes(filePath, outputBytes.ToArray());
+
+                    // Rozet ANCAK yazma döndükten sonra. Sıra önemlidir:
+                    // önce baytlar diske, sonra kullanıcıya "oldu" demek.
+                    _uiActionQueue.Enqueue(() => _dashboardView?.UpdateDashboard(filePath, "Onarıldı", "#89B4FA"));
                     LogToConsole($"✨ [BAŞARILI] Dosya onarıldı ve kaydedildi: {Path.GetFileName(filePath)}", filePath);
                     _pendingFixFiles.Remove(filePath);
                     _fileErrors.Remove(filePath);
@@ -994,7 +1005,11 @@ public class MainWindow : Adw.ApplicationWindow
         }
         catch (Exception ex)
         {
-            LogToConsole($"❌ HATA: {Path.GetFileName(filePath)} okunamadı -> {ex.Message}", filePath);
+            // Panel de hatayı GÖRMELİ. Eskiden yalnız günlüğe yazılıyordu;
+            // gösterge tablosu son bilinen (çoğu zaman iyimser) durumda kalırdı.
+            LogToConsole($"❌ HATA: {Path.GetFileName(filePath)} işlenemedi -> {ex.Message}", filePath);
+            _fileErrors[filePath] = $"İşlenemedi: {ex.Message}";
+            _uiActionQueue.Enqueue(() => _dashboardView?.UpdateDashboard(filePath, "Hata", "#F38BA8"));
         }
     }
 

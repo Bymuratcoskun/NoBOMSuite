@@ -221,6 +221,25 @@ yüklendi, dört tarama iddiası (BOM var/yok, ZWSP var/yok) paketlenmiş kopya
 üzerinde koşturuldu. *Paketleme "DONE" demesi çalıştığı anlamına gelmiyor —
 bu turda tam olarak bu yaşandı.*
 
+## 2026-08-31 — masaüstü onarım yolu denetimi
+
+Hafızadaki dört sahte-başarıdan **üçü zaten düzeltilmişti** (hayalet onarımı beş
+karakteri de siliyor · önbellek `hasIssues: true` dalını alıyor · parola
+tarayıcısı kendi maskesini parola saymıyor). Dördüncüsünün kalıntısı duruyordu:
+
+- 🔴 **"Onarıldı" rozeti dosya yazılmadan ÖNCE kuyruğa giriyordu.** Yedekleme,
+  kodlama, regex ya da `WriteAllBytes` (izin / disk dolu / salt okunur) hata
+  verirse akış `catch`'e düşüyor, günlüğe "HATA" yazılıyor, ama panelde **mavi
+  "Onarıldı" rozeti asılı kalıyordu**. Rozet artık yazma döndükten sonra veriliyor.
+- 🔴 **`catch` paneli hiç güncellemiyordu** — hata yalnız günlüğe gidiyordu,
+  gösterge tablosu son (iyimser) durumda kalıyordu. Artık kırmızı "Hata" rozeti
+  ve `_fileErrors` kaydı düşüyor.
+
+⚠️ **Bu iki düzeltmenin testi YOK.** Kusur `MainWindow` içinde, Avalonia UI
+kuyruğuna bağlı; test edilebilir bir yüzeyi yok. Doğru çözüm onarım mantığını
+UI'dan ayrı saf bir sınıfa çıkarmaktır — yapılmadı, çünkü masaüstü uygulaması
+yayınlanmıyor. **Düzeltildi ama kanıtlanmadı olarak sayılır.**
+
 ## Sıradaki en değerli işler (ölçüme dayalı)
 
 1. **Ajan 2 ve 3'ü canlı koştur** — altyapı hazır, yerel 14B bağlı; tek
