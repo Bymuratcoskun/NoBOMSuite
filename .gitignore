@@ -1,8 +1,22 @@
+# ── Derleme çıktısı ve ara dosyalar (üretilebilir, depoda durmaz) ──
+bin/
+obj/
+*.user
+*.suo
 
-# Eklenti paketleri (üretilebilir çıktı)
+# ── Bağımlılıklar — package-lock.json izlenir, node_modules izlenmez ──
+node_modules/
+
+# ── Eklenti paketi (üretilebilir çıktı) ──
 *.vsix
 native/
 
-# Uretilen calisma verisi — depoda durmaz (2026-08-31)
+# ── Üretilen çalışma verisi (2026-08-31) ──
 devguard_auto.log
 devguard_logs.db
+
+# ── Kişisel IDE / araç ayarları — başkasının makinesinde anlamı yok ──
+.idea/
+.vscode/
+.continue/
+.vs/
